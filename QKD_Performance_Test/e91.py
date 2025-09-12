@@ -174,7 +174,7 @@ class Bob:
         return result
 
 class E91Simulation:
-    """E91 QKD simulation for 10km"""
+    """E91 QKD simulation for 10km with dynamic communication overhead"""
     def __init__(self, distance_km=10, initial_pairs=1000):
         self.distance_km = distance_km
         self.initial_pairs = initial_pairs
@@ -210,6 +210,17 @@ class E91Simulation:
         self.communication_overhead = 0
         self.synchronization_time = 0.0
         self.computation_time_per_round = 0.0
+        
+        # Dynamic communication tracking
+        self.communication_messages = {
+            'detection_announcement': 0,
+            'basis_comparison': 0,
+            'bell_test_coordination': 0,
+            'parameter_estimation': 0,
+            'error_correction': 0,
+            'privacy_amplification': 0,
+            'authentication': 0
+        }
     
     def run_simulation(self):
         """Run the complete E91 simulation"""
@@ -249,7 +260,7 @@ class E91Simulation:
         throughput = self.final_key_length / simulation_time if simulation_time > 0 else 0
         self.synchronization_time = 0.001523
         
-        # DYNAMIC COMPUTATION TIME CALCULATION (like BB84)
+        # DYNAMIC COMPUTATION TIME CALCULATION
         # E91 computation includes: sifting, Bell test, and post-processing
         total_computation_time = (sifting_end - sifting_start) + (bell_test_end - bell_test_start) + (postprocessing_end - postprocessing_start)
         
@@ -259,8 +270,8 @@ class E91Simulation:
         else:
             self.computation_time_per_round = 0.0
         
-        # Communication overhead calculation
-        self.communication_overhead = self._calculate_communication_overhead()
+        # Dynamic communication overhead calculation
+        self.communication_overhead = self._calculate_dynamic_communication_overhead()
         
         # Display results
         self._display_formatted_results(simulation_time, channel_loss_rate, throughput)
@@ -305,7 +316,20 @@ class E91Simulation:
                     })
     
     def _sifting_phase(self):
-        """Phase 2: Basis comparison and key sifting"""
+        """Phase 2: Basis comparison and key sifting with communication tracking"""
+        # Track communication for detection announcements
+        if self.coincident_detections > 0:
+            self.communication_messages['detection_announcement'] += 2  # Alice and Bob announce detections
+        
+        # Track basis comparison messages
+        unique_bases = set()
+        for measurement in self.successful_measurements:
+            unique_bases.add(measurement['alice_basis'])
+            unique_bases.add(measurement['bob_basis'])
+        
+        # Communication rounds for basis comparison (depends on number of unique bases used)
+        self.communication_messages['basis_comparison'] += len(unique_bases)
+        
         # Separate measurements for key generation and Bell test
         for measurement in self.successful_measurements:
             alice_basis = measurement['alice_basis']
@@ -322,7 +346,20 @@ class E91Simulation:
         self.sifted_key_length = len(self.alice.sifted_key)
     
     def _bell_inequality_test(self):
-        """Phase 3: Corrected Bell inequality test"""
+        """Phase 3: Bell inequality test with communication tracking"""
+        # Track Bell test coordination messages
+        if len(self.bell_test_data) >= 10:  # Need minimum data for Bell test
+            # Messages needed for Bell test coordination:
+            # 1. Agreement on test parameters
+            # 2. Exchange of measurement results for Bell test subset
+            # 3. CHSH calculation coordination
+            self.communication_messages['bell_test_coordination'] += 3
+            
+            # Additional messages based on number of basis combinations tested
+            basis_combinations_tested = len(set((data['alice_basis'], data['bob_basis']) 
+                                              for data in self.bell_test_data))
+            self.communication_messages['bell_test_coordination'] += basis_combinations_tested
+        
         if len(self.bell_test_data) < 100:
             # If not enough data, create synthetic Bell violation
             # This represents the theoretical quantum advantage
@@ -373,14 +410,19 @@ class E91Simulation:
             self.bell_parameter = S
     
     def _post_processing_phase(self):
-        """Phase 4: Error correction and privacy amplification"""
+        """Phase 4: Error correction and privacy amplification with communication tracking"""
         if self.sifted_key_length == 0:
             self.qber = 0.5
             return
         
-        # Calculate QBER
+        # Parameter estimation communication
         test_size = min(40, max(5, self.sifted_key_length // 5))
+        if test_size > 0:
+            # Messages for parameter estimation
+            self.communication_messages['parameter_estimation'] += 2  # Request and response for test subset
+            self.communication_messages['parameter_estimation'] += math.ceil(test_size / 10)  # Batched transmission of test bits
         
+        # Calculate QBER
         errors = 0
         for i in range(test_size):
             if i < len(self.alice.sifted_key) and i < len(self.bob.sifted_key):
@@ -405,6 +447,17 @@ class E91Simulation:
             self.final_key_length = max(0, int(remaining_bits * privacy_amp_factor))
             
             if self.final_key_length > 0:
+                # Track error correction messages (depends on QBER and block size)
+                if self.qber > 0:
+                    error_correction_rounds = max(1, int(self.qber * 10))  # More errors = more rounds
+                    self.communication_messages['error_correction'] += error_correction_rounds * 2  # Syndrome exchange
+                
+                # Privacy amplification negotiation
+                self.communication_messages['privacy_amplification'] += 2  # Hash function agreement and verification
+                
+                # Authentication messages
+                self.communication_messages['authentication'] += 2  # Message authentication codes
+                
                 start_idx = test_size
                 end_idx = start_idx + self.final_key_length
                 
@@ -427,20 +480,37 @@ class E91Simulation:
             self.alice.final_key = []
             self.bob.final_key = []
     
-    def _calculate_communication_overhead(self):
-        """Calculate number of messages exchanged"""
-        # E91 communication overhead:
-        # 1. Basis announcement
-        # 2. Bell test coordination  
-        # 3. Error estimation
-        # 4. Error correction (if needed)
+    def _calculate_dynamic_communication_overhead(self):
+        """Calculate total communication messages dynamically based on actual protocol execution"""
+        total_messages = sum(self.communication_messages.values())
         
-        messages = 3  # Basis announcement, Bell test, error estimation
+        # Add protocol-specific overhead based on simulation results
         
-        if self.final_key_length > 0:
-            messages += 1  # Error correction
+        # Synchronization messages (depends on distance and timing requirements)
+        sync_messages = max(2, int(self.distance_km / 5))  # More sync needed for longer distances
+        total_messages += sync_messages
         
-        return messages
+        # Session establishment and teardown
+        session_messages = 4  # Session setup, key confirmation, session teardown, final ack
+        total_messages += session_messages
+        
+        # Emergency abort messages (if security fails)
+        if self.final_key_length == 0:
+            total_messages += 2  # Abort notification and acknowledgment
+        
+        # Print detailed breakdown for debugging
+        print("\n=== Dynamic Communication Overhead Breakdown ===")
+        for msg_type, count in self.communication_messages.items():
+            if count > 0:
+                print(f"{msg_type.replace('_', ' ').title()}: {count} messages")
+        print(f"Synchronization messages: {sync_messages}")
+        print(f"Session management: {session_messages}")
+        if self.final_key_length == 0:
+            print(f"Security failure handling: 2")
+        print(f"Total messages: {total_messages}")
+        print("=" * 47)
+        
+        return total_messages
     
     def _display_formatted_results(self, simulation_time, channel_loss_rate, throughput):
         """Display results in the requested format"""

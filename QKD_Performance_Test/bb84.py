@@ -1,6 +1,7 @@
 import numpy as np
 import random
 import time
+import math
 from typing import List, Tuple, Dict
 
 class FibreLossModel:
@@ -119,7 +120,7 @@ class Bob:
         return measured_bit
 
 class BB84Simulation:
-    """Main BB84 QKD simulation class"""
+    """Main BB84 QKD simulation class with dynamic communication overhead"""
     def __init__(self, distance_km=10, initial_bits=1000):
         self.distance_km = distance_km
         self.initial_bits = initial_bits
@@ -151,6 +152,19 @@ class BB84Simulation:
         self.communication_overhead = 0
         self.synchronization_time = 0.0
         self.computation_time_per_round = 0.0
+        
+        # Dynamic communication tracking
+        self.communication_messages = {
+            'session_establishment': 0,
+            'quantum_transmission_sync': 0,
+            'detection_announcement': 0,
+            'basis_reconciliation': 0,
+            'parameter_estimation': 0,
+            'error_correction': 0,
+            'privacy_amplification': 0,
+            'authentication': 0,
+            'key_confirmation': 0
+        }
     
     def run_simulation(self):
         """Run the complete BB84 simulation"""
@@ -162,20 +176,26 @@ class BB84Simulation:
         
         start_time = time.time()
         
-        # Step 1: Quantum transmission phase
+        # Step 1: Session establishment
+        self._session_establishment()
+        
+        # Step 2: Quantum transmission phase
         quantum_start = time.time()
         self._quantum_transmission_phase()
         quantum_end = time.time()
         
-        # Step 2: Sifting phase (classical communication)
+        # Step 3: Sifting phase (classical communication)
         sifting_start = time.time()
         self._sifting_phase()
         sifting_end = time.time()
         
-        # Step 3: Error correction and privacy amplification
+        # Step 4: Error correction and privacy amplification
         postprocessing_start = time.time()
         self._post_processing_phase()
         postprocessing_end = time.time()
+        
+        # Step 5: Key confirmation and session teardown
+        self._session_teardown()
         
         end_time = time.time()
         simulation_time = end_time - start_time
@@ -187,8 +207,8 @@ class BB84Simulation:
         self.synchronization_time = (sifting_end - sifting_start) + 0.001234  # Add realistic sync time
         self.computation_time_per_round = (postprocessing_end - postprocessing_start) / max(1, self.sifted_key_length)
         
-        # Communication overhead calculation
-        self.communication_overhead = self._calculate_communication_overhead()
+        # Dynamic communication overhead calculation
+        self.communication_overhead = self._calculate_dynamic_communication_overhead()
         
         # Display results in the requested format
         self._display_formatted_results(simulation_time, channel_loss_rate, throughput)
@@ -199,14 +219,28 @@ class BB84Simulation:
             'simulation_time': simulation_time
         }
     
+    def _session_establishment(self):
+        """Phase 0: Establish secure communication session"""
+        # Initial handshake and protocol negotiation
+        self.communication_messages['session_establishment'] += 4  # SYN, SYN-ACK, ACK, Protocol params
+        
+        # Time synchronization for quantum transmission
+        sync_rounds = max(2, int(self.distance_km / 10))  # More rounds for longer distances
+        self.communication_messages['session_establishment'] += sync_rounds * 2  # Request-response pairs
+    
     def _quantum_transmission_phase(self):
-        """Phase 1: Alice sends qubits to Bob"""
+        """Phase 1: Alice sends qubits to Bob with synchronization"""
         # Alice generates random bits and bases
         self.alice.generate_random_bits(self.initial_bits)
         self.alice.generate_random_bases(self.initial_bits)
         
         # Bob generates random measurement bases
         self.bob.generate_random_bases(self.initial_bits)
+        
+        # Quantum transmission synchronization (every batch of pulses)
+        batch_size = 50  # Send in batches for synchronization
+        num_batches = math.ceil(self.initial_bits / batch_size)
+        self.communication_messages['quantum_transmission_sync'] += num_batches * 2  # Start/end signals per batch
         
         # Alice prepares and sends qubits
         alice_qubits = self.alice.prepare_qubits()
@@ -233,10 +267,29 @@ class BB84Simulation:
                     })
     
     def _sifting_phase(self):
-        """Phase 2: Basis reconciliation and key sifting"""
+        """Phase 2: Basis reconciliation and key sifting with communication tracking"""
+        # Bob announces which pulses he detected
+        if self.photons_received > 0:
+            # Detection announcements sent in batches to reduce overhead
+            detection_batches = math.ceil(self.photons_received / 100)
+            self.communication_messages['detection_announcement'] += detection_batches
+        
+        # Basis reconciliation - Alice and Bob compare bases
+        # This requires multiple rounds of communication
+        unique_positions = len(self.successful_transmissions)
+        if unique_positions > 0:
+            # Alice announces her bases for detected pulses
+            basis_batches = math.ceil(unique_positions / 50)  # Send in batches
+            self.communication_messages['basis_reconciliation'] += basis_batches
+            
+            # Bob responds with his matching basis selections
+            self.communication_messages['basis_reconciliation'] += basis_batches
+            
+            # Confirmation of basis matching
+            self.communication_messages['basis_reconciliation'] += 1
+        
         # Alice and Bob compare bases over classical channel
         # Keep only bits where bases matched
-        
         for transmission in self.successful_transmissions:
             if transmission['alice_basis'] == transmission['bob_basis']:
                 # Bases match - include in sifted key
@@ -246,14 +299,21 @@ class BB84Simulation:
         self.sifted_key_length = len(self.alice.sifted_key)
     
     def _post_processing_phase(self):
-        """Phase 3: Error correction and privacy amplification"""
+        """Phase 3: Error correction and privacy amplification with communication tracking"""
         if self.sifted_key_length == 0:
             self.qber = 0.5
             return
         
-        # Calculate QBER by comparing subset of sifted key
-        test_size = min(50, max(5, self.sifted_key_length // 5))  # Use smaller test size
+        # Parameter estimation
+        test_size = min(50, max(5, self.sifted_key_length // 5))
+        if test_size > 0:
+            # Coordinate parameter estimation
+            self.communication_messages['parameter_estimation'] += 2  # Coordinate test subset
+            # Exchange test bits
+            test_batches = math.ceil(test_size / 10)
+            self.communication_messages['parameter_estimation'] += test_batches * 2  # Alice sends, Bob confirms
         
+        # Calculate QBER by comparing subset of sifted key
         errors = 0
         for i in range(test_size):
             if i < len(self.alice.sifted_key) and i < len(self.bob.sifted_key):
@@ -267,6 +327,21 @@ class BB84Simulation:
             # Account for bits used in parameter estimation
             remaining_bits = self.sifted_key_length - test_size
             
+            # Error correction communication
+            if self.qber > 0:
+                # Error correction requires multiple rounds based on QBER
+                error_correction_rounds = max(1, int(self.qber * 15))  # More errors = more rounds
+                self.communication_messages['error_correction'] += error_correction_rounds * 3  # Syndrome exchange and verification
+            else:
+                self.communication_messages['error_correction'] += 1  # Minimal verification
+            
+            # Privacy amplification
+            self.communication_messages['privacy_amplification'] += 3  # Hash function agreement, parameters, confirmation
+            
+            # Authentication of classical communication
+            auth_rounds = 2 + (1 if self.qber > 0.05 else 0)  # More auth if higher QBER
+            self.communication_messages['authentication'] += auth_rounds
+            
             # More aggressive overhead for realistic BB84
             error_correction_overhead = max(0.2, 2.0 * self.qber)  # Higher overhead
             
@@ -276,7 +351,6 @@ class BB84Simulation:
             self.final_key_length = max(0, int(remaining_bits * privacy_amp_factor))
             
             if self.final_key_length > 0:
-                # Create corrected final keys
                 start_idx = test_size
                 end_idx = start_idx + self.final_key_length
                 
@@ -299,24 +373,42 @@ class BB84Simulation:
             self.alice.final_key = []
             self.bob.final_key = []
     
-    def _calculate_communication_overhead(self):
-        """Calculate number of messages exchanged between Alice and Bob"""
-        # BB84 communication overhead:
-        # 1. Bob announces which qubits he received
-        # 2. Alice and Bob compare bases
-        # 3. Error estimation communication
-        # 4. Error correction messages (if needed)
-        
-        messages = 0
-        messages += 1  # Bob announces successful detections
-        messages += 1  # Basis comparison (Alice announces her bases)
-        messages += 1  # Bob announces his bases
-        
+    def _session_teardown(self):
+        """Phase 4: Key confirmation and session teardown"""
         if self.final_key_length > 0:
-            messages += 1  # Error estimation communication
-            messages += 1  # Error correction protocol
+            # Key confirmation protocol
+            self.communication_messages['key_confirmation'] += 3  # Hash comparison and confirmation
+        else:
+            # Session abort due to security failure
+            self.communication_messages['key_confirmation'] += 2  # Abort and acknowledgment
+    
+    def _calculate_dynamic_communication_overhead(self):
+        """Calculate total communication messages dynamically based on actual protocol execution"""
+        total_messages = sum(self.communication_messages.values())
         
-        return messages
+        # Add protocol-specific overhead based on simulation results
+        
+        # Distance-dependent synchronization overhead
+        sync_overhead = max(3, int(self.distance_km / 3))  # More sync needed for longer distances
+        total_messages += sync_overhead
+        
+        # Channel-dependent retransmission overhead
+        if self.detection_rate < 0.7:  # Poor channel conditions
+            retransmission_overhead = 2
+            total_messages += retransmission_overhead
+        
+        # Print detailed breakdown
+        print("\n=== Dynamic Communication Overhead Breakdown ===")
+        for msg_type, count in self.communication_messages.items():
+            if count > 0:
+                print(f"{msg_type.replace('_', ' ').title()}: {count} messages")
+        print(f"Synchronization overhead: {sync_overhead}")
+        if self.detection_rate < 0.7:
+            print(f"Retransmission overhead: 2")
+        print(f"Total messages: {total_messages}")
+        print("=" * 47)
+        
+        return total_messages
     
     def _display_formatted_results(self, simulation_time, channel_loss_rate, throughput):
         """Display results in the requested format"""
