@@ -58,27 +58,27 @@ class QuantumChannel:
         return noisy_state
 
 class EntanglementSource:
-    """Generates entangled photon pairs for E91 - FIXED with realistic limitations"""
+    """Generates entangled photon pairs for E91 with realistic limitations"""
     def __init__(self, distance_km):
         self.name = "Entanglement Source"
         self.distance_km = distance_km
         
-        # FIXED: Realistic entanglement source parameters
+        # Realistic entanglement source parameters
         self.generation_efficiency = 0.75  # 75% entanglement generation efficiency
         self.pair_generation_rate = 0.85   # 85% success rate for pair generation
         self.entanglement_fidelity = 0.92  # 92% entanglement fidelity
         
     def generate_entangled_pair(self):
         """Generate entangled Bell state pair with realistic limitations"""
-        # FIXED: Apply generation efficiency
+        # Apply generation efficiency
         if random.random() > self.generation_efficiency:
             return None, None  # Generation failed
         
-        # FIXED: Apply pair generation success rate  
+        # Apply pair generation success rate  
         if random.random() > self.pair_generation_rate:
             return None, None  # Pair generation failed
         
-        # FIXED: Apply entanglement fidelity limitations
+        # Apply entanglement fidelity limitations
         if random.random() > self.entanglement_fidelity:
             # Mixed state - reduced correlation
             return random.randint(0, 1), random.randint(0, 1)
@@ -112,12 +112,12 @@ class Alice:
         if photon is None:
             return None
         
-        # FIXED: Apply same detector efficiency as MDI for fair comparison
+        # Apply same detector efficiency as MDI for fair comparison
         detector_efficiency = 0.85
         if random.random() > detector_efficiency:
             return None  # Detection failed
         
-        # FIXED: Apply realistic measurement errors
+        # Apply realistic measurement errors
         measurement_error_rate = 0.01 + (0.0005 * 10)  # Same as BB84/MDI
         
         # Quantum measurement simulation
@@ -173,12 +173,12 @@ class Bob:
         if photon is None:
             return None
         
-        # FIXED: Apply same detector efficiency as Alice/MDI
+        # Apply same detector efficiency as Alice/MDI
         detector_efficiency = 0.85
         if random.random() > detector_efficiency:
             return None
         
-        # FIXED: Apply realistic measurement errors
+        # Apply realistic measurement errors
         measurement_error_rate = 0.01 + (0.0005 * 10)  # Same as others
         
         # Bob's measurements with proper entanglement correlations
@@ -210,7 +210,7 @@ class Bob:
         return result
 
 class E91Simulation:
-    """E91 QKD simulation with FIXED realistic parameters matching MDI/BB84"""
+    """E91 QKD simulation with realistic parameters matching MDI/BB84"""
     def __init__(self, distance_km=10, initial_pairs=1000):
         self.distance_km = distance_km
         self.initial_pairs = initial_pairs
@@ -220,7 +220,7 @@ class E91Simulation:
         self.bob = Bob()
         self.ent_source = EntanglementSource(distance_km)  # Pass distance
         
-        # FIXED: Use SAME channel parameters as MDI/BB84 for fair comparison
+        # Use SAME channel parameters as MDI/BB84 for fair comparison
         self.loss_model = FibreLossModel(p_loss_init=0.1, p_loss_length=0.2)  # Same as MDI/BB84
         self.delay_model = FibreDelayModel(c=1.9e5)  # Same as MDI/BB84
         self.noise_model = DepolarNoiseModel(depolar_rate=0.008)  # Same as MDI/BB84
@@ -263,7 +263,7 @@ class E91Simulation:
     
     def run_simulation(self):
         """Run the complete E91 simulation (keeping original logic)"""
-        print("=== E91 QKD Simulation (FIXED) ===")
+        print("=== E91 QKD Simulation ===")
         print("Ekert 1991 Entanglement-Based Quantum Key Distribution")
         print(f"Distance between Alice and Bob: {self.distance_km} km")
         print(f"Entanglement source positioned at: {self.distance_km/2} km from each party")
@@ -353,7 +353,7 @@ class E91Simulation:
         
         # Generate and distribute entangled pairs
         for i in range(self.initial_pairs):
-            # FIXED: Generate entangled pair with realistic limitations
+            # Generate entangled pair with realistic limitations
             photon_a, photon_b = self.ent_source.generate_entangled_pair()
             
             # Skip if entanglement generation failed
@@ -423,7 +423,7 @@ class E91Simulation:
             self.communication_messages['bell_test_coordination'] += 4
         
         if len(self.bell_test_data) < 100:
-            # FIXED: More conservative Bell parameter for realistic E91
+            # More conservative Bell parameter for realistic E91
             self.bell_parameter = 2.1  # Reduced from 2.4 for more realism
             return
         
@@ -453,7 +453,7 @@ class E91Simulation:
         
         S = abs(E_00 - E_01 + E_10 + E_11)
         
-        # FIXED: More realistic Bell parameter enhancement
+        # More realistic Bell parameter enhancement
         if S > 1.5:
             quantum_enhancement = 1.2  # Reduced from 1.4 for realism
             self.bell_parameter = min(2.6, S * quantum_enhancement)  # Reduced max
@@ -472,7 +472,7 @@ class E91Simulation:
             self.communication_messages['parameter_estimation'] += 6
             self.communication_messages['parameter_estimation'] += math.ceil(test_size / 8)
         
-        # FIXED: More realistic QBER calculation for E91
+        # More realistic QBER calculation for E91
         base_error_rate = 0.02  # Higher base error for entanglement-based
         distance_penalty = self.distance_km * 0.0008  # Distance-dependent
         entanglement_penalty = (1.0 - self.ent_source.entanglement_fidelity) * 0.1  # Fidelity impact
@@ -499,7 +499,7 @@ class E91Simulation:
             self.communication_messages['privacy_amplification'] += 4
             self.communication_messages['authentication'] += 4
             
-            # FIXED: Use same overhead calculation as BB84/MDI for fair comparison
+            # Use same overhead calculation as BB84/MDI for fair comparison
             error_correction_overhead = max(0.15, 1.5 * self.qber)
             privacy_amp_factor = max(0.3, 1 - error_correction_overhead - 0.25)
             
@@ -554,7 +554,7 @@ class E91Simulation:
         else:
             security_failure_overhead = 0
         
-        print("\n=== Dynamic Communication Overhead Breakdown (FIXED) ===")
+        print("\n=== Dynamic Communication Overhead Breakdown ===")
         for msg_type, count in self.communication_messages.items():
             if count > 0:
                 print(f"{msg_type.replace('_', ' ').title()}: {count} messages")
@@ -583,7 +583,7 @@ class E91Simulation:
             print("[E91] Bob Key:   (No secure key generated)")
         
         print()
-        print("=== E91 Protocol Performance Report (FIXED) ===")
+        print("=== E91 Protocol Performance Report ===")
         print(f"Raw Key Rate:           {self.final_key_length} bits")
         print(f"QBER:                   {self.qber*100:.2f}%")
         sim_time_ms = simulation_time * 1e3
@@ -599,7 +599,7 @@ class E91Simulation:
         print("=" * 50)
         print()
         print("Running distance analysis...")
-        print("E91 simulation completed (FIXED)!")
+        print("E91 simulation completed !")
 
 def main():
     """Main function to run the E91 simulation"""

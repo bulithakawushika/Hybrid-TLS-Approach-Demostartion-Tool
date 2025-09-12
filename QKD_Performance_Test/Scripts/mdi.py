@@ -89,14 +89,14 @@ class Party:
         return qubits
 
 class Charlie:
-    """Untrusted measurement device (Charlie) - FIXED with realistic performance"""
+    """Untrusted measurement device (Charlie) with realistic performance"""
     def __init__(self, distance_km):
         self.name = "Charlie"
         self.measurements = []
         self.coincidences = []
         self.distance_km = distance_km
         
-        # FIXED: Realistic Bell State Measurement parameters
+        # Realistic Bell State Measurement parameters
         self.bsm_success_rate = self._calculate_bsm_success_rate(distance_km)
         self.detector_efficiency = 0.85  # Realistic detector efficiency
         self.timing_window_error = 0.03  # 3% timing synchronization errors
@@ -104,7 +104,7 @@ class Charlie:
         self.interference_visibility = 0.95  # HOM interference visibility
         
     def _calculate_bsm_success_rate(self, distance_km):
-        """FIXED: Calculate realistic BSM success rate based on distance"""
+        """Calculate realistic BSM success rate based on distance"""
         # Bell State Measurement becomes harder with distance due to:
         # 1. Timing synchronization challenges
         # 2. Detector jitter
@@ -119,37 +119,37 @@ class Charlie:
         return max(0.05, realistic_rate)  # Minimum 5% success rate
     
     def bell_state_measurement(self, qubit1, qubit2, basis1, basis2):
-        """FIXED: Realistic Bell state measurement with proper limitations"""
+        """Realistic Bell state measurement with proper limitations"""
         # Check if both qubits arrived
         if qubit1 is None or qubit2 is None:
             return None, None
         
-        # FIXED: Apply detector efficiency
+        # Apply detector efficiency
         if random.random() > self.detector_efficiency:
             return None, None  # Detection failed
         
-        # FIXED: Apply timing window errors
+        # Apply timing window errors
         if random.random() < self.timing_window_error:
             return None, None  # Timing synchronization failed
         
-        # FIXED: Dark count noise
+        # Dark count noise
         if random.random() < self.dark_count_rate:
             return False, random.randint(0, 1)  # False positive from dark count
         
-        # FIXED: Only attempt BSM when bases match (realistic constraint)
+        # Only attempt BSM when bases match (realistic constraint)
         if basis1 != basis2:
             return False, None  # Basis mismatch - cannot perform meaningful BSM
         
-        # FIXED: Bell State Measurement success rate
+        # Bell State Measurement success rate
         if random.random() > self.bsm_success_rate:
             return None, None  # BSM failed
         
-        # FIXED: Apply interference visibility limitations
+        # Apply interference visibility limitations
         if random.random() > self.interference_visibility:
             # Poor interference - random outcome
             return True, random.randint(0, 1)
         
-        # FIXED: Successful BSM with realistic measurement error
+        # Successful BSM with realistic measurement error
         measurement_error_rate = 0.02 + (self.distance_km * 0.0005)  # Increases with distance
         if random.random() < measurement_error_rate:
             outcome = random.randint(0, 1)  # Random due to measurement error
@@ -160,7 +160,7 @@ class Charlie:
         return True, outcome
 
 class MDIQKDSimulation:
-    """FIXED MDI-QKD simulation with realistic performance limitations"""
+    """MDI-QKD simulation with realistic performance limitations"""
     def __init__(self, distance_km=10, initial_bits=1000):
         self.distance_km = distance_km
         self.initial_bits = initial_bits
@@ -170,7 +170,7 @@ class MDIQKDSimulation:
         self.bob = Party("Bob")
         self.charlie = Charlie(distance_km)  # Pass distance for realistic modeling
         
-        # FIXED: More realistic channel parameters for MDI-QKD
+        # More realistic channel parameters for MDI-QKD
         self.loss_model = FibreLossModel(p_loss_init=0.1, p_loss_length=0.2)  # Slightly higher initial loss
         self.delay_model = FibreDelayModel(c=1.9e5)  # Slightly lower speed (realistic fiber)
         self.noise_model = DepolarNoiseModel(depolar_rate=0.008)  # Higher noise for MDI setup
@@ -199,7 +199,7 @@ class MDIQKDSimulation:
         self.synchronization_time = 0.0
         self.computation_time_per_round = 0.0
         
-        # FIXED: More realistic communication overhead for three-party MDI
+        # More realistic communication overhead for three-party MDI
         self.communication_messages = {
             'session_establishment': 0,
             'charlie_coordination': 0,
@@ -218,13 +218,13 @@ class MDIQKDSimulation:
     
     def run_simulation(self):
         """Run the complete MDI-QKD simulation with realistic performance"""
-        print("=== MDI-QKD Simulation (FIXED) ===")
+        print("=== MDI-QKD Simulation ===")
         print("Measurement-Device-Independent Quantum Key Distribution")
         print(f"Distance between Alice and Bob: {self.distance_km} km")
         print(f"Charlie positioned at: {self.distance_km/2} km from each party")
         print(f"Expected BSM success rate: {self.charlie.bsm_success_rate:.3f}")
         print()
-        print("Running FIXED MDI-QKD simulation...")
+        print("Running MDI-QKD simulation...")
         
         start_time = time.time()
         
@@ -274,7 +274,7 @@ class MDIQKDSimulation:
         }
     
     def _session_establishment(self):
-        """FIXED: Much more complex three-party session establishment"""
+        """Much more complex three-party session establishment"""
         # Complex three-party handshake
         self.communication_messages['session_establishment'] += 18  # Much higher overhead
         
@@ -289,7 +289,7 @@ class MDIQKDSimulation:
         self.communication_messages['three_party_sync'] += sync_rounds * 6  # 6-way messaging
     
     def _quantum_transmission_phase(self):
-        """FIXED: Quantum transmission with realistic limitations"""
+        """Quantum transmission with realistic limitations"""
         # Alice and Bob generate random bits and bases
         self.alice.generate_random_bits(self.initial_bits)
         self.alice.generate_random_bases(self.initial_bits)
@@ -300,7 +300,7 @@ class MDIQKDSimulation:
         alice_qubits = self.alice.prepare_qubits()
         bob_qubits = self.bob.prepare_qubits()
         
-        # FIXED: Much smaller batch sizes for precise three-party timing
+        # Much smaller batch sizes for precise three-party timing
         batch_size = 25  # Much smaller batches for tighter synchronization
         num_batches = math.ceil(self.initial_bits / batch_size)
         # Higher synchronization overhead per batch
@@ -318,7 +318,7 @@ class MDIQKDSimulation:
             bob_qubit = self.bob_channel.transmit(bob_qubits[i][0])
             bob_basis = bob_qubits[i][1]
             
-            # FIXED: Charlie performs realistic Bell state measurement
+            # Charlie performs realistic Bell state measurement
             if alice_qubit is not None and bob_qubit is not None:
                 self.coincidences += 1
                 
@@ -340,7 +340,7 @@ class MDIQKDSimulation:
                     })
     
     def _sifting_phase(self):
-        """FIXED: More complex three-party sifting"""
+        """More complex three-party sifting"""
         # Charlie announces successful BSM to both parties
         if self.successful_bsm > 0:
             measurement_batches = math.ceil(self.successful_bsm / 20)  # Small batches
@@ -369,12 +369,12 @@ class MDIQKDSimulation:
         self.sifted_key_length = len(self.alice.sifted_key)
     
     def _post_processing_phase(self):
-        """FIXED: Enhanced error correction for device-independent security"""
+        """Enhanced error correction for device-independent security"""
         if self.sifted_key_length == 0:
             self.qber = 0.5
             return
         
-        # FIXED: More conservative parameter estimation for MDI
+        # More conservative parameter estimation for MDI
         test_size = min(150, max(15, self.sifted_key_length // 3))  # Larger test set needed
         if test_size > 0:
             # Complex parameter estimation for device independence
@@ -385,7 +385,7 @@ class MDIQKDSimulation:
         # Device independence verification
         self.communication_messages['device_verification'] += 12
         
-        # FIXED: More realistic QBER for MDI-QKD
+        # More realistic QBER for MDI-QKD
         # Include BSM imperfections and timing errors
         base_error_rate = 0.015  # Base error rate for MDI
         distance_penalty = self.distance_km * 0.0008  # Distance-dependent errors
@@ -394,7 +394,7 @@ class MDIQKDSimulation:
         simulated_errors = int(test_size * (base_error_rate + distance_penalty + bsm_penalty))
         self.qber = min(0.25, simulated_errors / test_size if test_size > 0 else 0.05)
         
-        # FIXED: More stringent error correction for device independence
+        # More stringent error correction for device independence
         if self.qber < 0.15 and self.sifted_key_length > test_size:  # More stringent threshold
             remaining_bits = self.sifted_key_length - test_size
             
@@ -412,7 +412,7 @@ class MDIQKDSimulation:
             auth_rounds = 6 + (3 if self.qber > 0.02 else 0)
             self.communication_messages['authentication'] += auth_rounds
             
-            # FIXED: Much higher overheads for MDI-QKD
+            # Much higher overheads for MDI-QKD
             error_correction_overhead = max(0.25, 2.2 * self.qber)  # Higher overhead
             device_independence_penalty = 0.15  # Additional penalty for DI security
             privacy_amp_factor = max(0.25, 1 - error_correction_overhead - device_independence_penalty - 1.5 * self.qber)
@@ -441,7 +441,7 @@ class MDIQKDSimulation:
             self.bob.final_key = []
     
     def _session_teardown(self):
-        """FIXED: Complex three-party session teardown"""
+        """Complex three-party session teardown"""
         if self.final_key_length > 0:
             # Three-party key confirmation with device verification
             self.communication_messages['key_confirmation'] += 8
@@ -450,10 +450,10 @@ class MDIQKDSimulation:
             self.communication_messages['key_confirmation'] += 6
     
     def _calculate_dynamic_communication_overhead(self):
-        """FIXED: Realistic high communication overhead for MDI-QKD"""
+        """Realistic high communication overhead for MDI-QKD"""
         total_messages = sum(self.communication_messages.values())
         
-        # FIXED: Much higher MDI-specific overheads
+        # Much higher MDI-specific overheads
         
         # Charlie coordination overhead
         charlie_overhead = max(15, int(self.distance_km / 1.0))  # High overhead
@@ -479,7 +479,7 @@ class MDIQKDSimulation:
             bsm_failure_overhead = 0
         
         # Print detailed breakdown
-        print("\n=== Dynamic Communication Overhead Breakdown (FIXED) ===")
+        print("\n=== Dynamic Communication Overhead Breakdown ===")
         for msg_type, count in self.communication_messages.items():
             if count > 0:
                 print(f"{msg_type.replace('_', ' ').title()}: {count} messages")
@@ -510,7 +510,7 @@ class MDIQKDSimulation:
             print("[MDI-QKD] Bob Key:   (No secure key generated)")
         
         print()
-        print("=== MDI-QKD Protocol Performance Report (FIXED) ===")
+        print("=== MDI-QKD Protocol Performance Report ===")
         print(f"Raw Key Rate:           {self.final_key_length} bits")
         print(f"QBER:                   {self.qber*100:.2f}%")
         sim_time_ms = simulation_time * 1e3
@@ -526,10 +526,10 @@ class MDIQKDSimulation:
         print("=" * 50)
         print()
         print("Running distance analysis...")
-        print("MDI-QKD simulation completed (FIXED)!")
+        print("MDI-QKD simulation completed!")
 
 def main():
-    """Main function to run the FIXED MDI-QKD simulation"""
+    """Main function to run the MDI-QKD simulation"""
     # Create and run simulation
     simulation = MDIQKDSimulation(distance_km=10, initial_bits=1000)
     results = simulation.run_simulation()

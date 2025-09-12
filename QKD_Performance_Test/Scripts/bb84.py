@@ -113,12 +113,12 @@ class Bob:
         
         measured_bit = qubit_state  # Start with received state
         
-        # FIXED: Realistic detector imperfections matching MDI setup
+        # Realistic detector imperfections matching MDI setup
         detector_efficiency = 0.85  # Same as MDI
         if random.random() > detector_efficiency:
             return None  # Detection failed
         
-        # FIXED: More realistic detector error rate
+        # More realistic detector error rate
         detector_error_rate = 0.01 + (0.0005 * 10)  # Distance-dependent like MDI
         if random.random() < detector_error_rate:
             measured_bit = 1 - measured_bit if measured_bit is not None else None
@@ -126,7 +126,7 @@ class Bob:
         return measured_bit
 
 class BB84Simulation:
-    """Main BB84 QKD simulation class with FIXED realistic parameters matching MDI"""
+    """Main BB84 QKD simulation class with realistic parameters matching MDI"""
     def __init__(self, distance_km=10, initial_bits=1000):
         self.distance_km = distance_km
         self.initial_bits = initial_bits
@@ -135,7 +135,7 @@ class BB84Simulation:
         self.alice = Alice()
         self.bob = Bob()
         
-        # FIXED: Use SAME channel parameters as MDI for fair comparison
+        # Use SAME channel parameters as MDI for fair comparison
         self.loss_model = FibreLossModel(p_loss_init=0.1, p_loss_length=0.2)  # Same as MDI
         self.delay_model = FibreDelayModel(c=1.9e5)  # Same as MDI
         self.noise_model = DepolarNoiseModel(depolar_rate=0.008)  # Same as MDI
@@ -174,7 +174,7 @@ class BB84Simulation:
     
     def run_simulation(self):
         """Run the complete BB84 simulation (keeping original logic)"""
-        print("=== BB84 QKD Simulation (FIXED) ===")
+        print("=== BB84 QKD Simulation ===")
         print("Bennett-Brassard 1984 Quantum Key Distribution")
         print(f"Distance between Alice and Bob: {self.distance_km} km")
         print()
@@ -294,7 +294,7 @@ class BB84Simulation:
         self.sifted_key_length = len(self.alice.sifted_key)
     
     def _post_processing_phase(self):
-        """Phase 3: Post-processing (keeping original logic but FIXED parameters)"""
+        """Phase 3: Post-processing (keeping original logic but parameters)"""
         if self.sifted_key_length == 0:
             self.qber = 0.5
             return
@@ -305,7 +305,7 @@ class BB84Simulation:
             test_batches = math.ceil(test_size / 15)
             self.communication_messages['parameter_estimation'] += test_batches * 2
         
-        # FIXED: More realistic QBER calculation for BB84
+        # More realistic QBER calculation for BB84
         errors = 0
         base_error_rate = 0.01  # Base error rate
         distance_penalty = self.distance_km * 0.0005  # Distance-dependent
@@ -337,7 +337,7 @@ class BB84Simulation:
             auth_rounds = 1 + (1 if self.qber > 0.05 else 0)
             self.communication_messages['authentication'] += auth_rounds
             
-            # FIXED: Use same overhead calculation as MDI for fair comparison
+            # Use same overhead calculation as MDI for fair comparison
             error_correction_overhead = max(0.2, 2.0 * self.qber)
             privacy_amp_factor = max(0.3, 1 - error_correction_overhead - 2 * self.qber)
             
@@ -384,7 +384,7 @@ class BB84Simulation:
         else:
             retransmission_overhead = 0
         
-        print("\n=== Dynamic Communication Overhead Breakdown (FIXED) ===")
+        print("\n=== Dynamic Communication Overhead Breakdown ===")
         for msg_type, count in self.communication_messages.items():
             if count > 0:
                 print(f"{msg_type.replace('_', ' ').title()}: {count} messages")
@@ -411,7 +411,7 @@ class BB84Simulation:
             print("[BB84] Bob Key:   (No secure key generated)")
         
         print()
-        print("=== BB84 Protocol Performance Report (FIXED) ===")
+        print("=== BB84 Protocol Performance Report ===")
         print(f"Raw Key Rate:           {self.final_key_length} bits")
         print(f"QBER:                   {self.qber*100:.2f}%")
         sim_time_ms = simulation_time * 1e3
@@ -426,7 +426,7 @@ class BB84Simulation:
         print("=" * 50)
         print()
         print("Running distance analysis...")
-        print("BB84 simulation completed (FIXED)!")
+        print("BB84 simulation completed!")
 
 def main():
     """Main function to run the BB84 simulation"""
