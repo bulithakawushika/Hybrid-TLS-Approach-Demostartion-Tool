@@ -159,17 +159,14 @@ class QKDDistanceTest:
         
         # Plot each protocol
         colors = {'BB84': 'blue', 'E91': 'red', 'MDI-QKD': 'green'}
-        markers = {'BB84': 'o', 'E91': 's', 'MDI-QKD': '^'}
         
         for protocol_name, data in results.items():
             if data['distances'] and data['raw_key_rates']:
                 plt.plot(data['distances'], 
                         data['raw_key_rates'], 
                         color=colors.get(protocol_name, 'black'),
-                        marker=markers.get(protocol_name, 'o'),
                         linestyle='-',
                         linewidth=2,
-                        markersize=6,
                         label=protocol_name,
                         alpha=0.8)
         
