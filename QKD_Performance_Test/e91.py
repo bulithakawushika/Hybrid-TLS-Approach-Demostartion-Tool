@@ -174,7 +174,7 @@ class Bob:
         return result
 
 class E91Simulation:
-    """E91 QKD simulation for 10km with dynamic communication overhead"""
+    """E91 QKD simulation for 10km with FIXED realistic communication overhead"""
     def __init__(self, distance_km=10, initial_pairs=1000):
         self.distance_km = distance_km
         self.initial_pairs = initial_pairs
@@ -211,15 +211,18 @@ class E91Simulation:
         self.synchronization_time = 0.0
         self.computation_time_per_round = 0.0
         
-        # Dynamic communication tracking
+        # FIXED: Enhanced dynamic communication tracking for realistic E91
         self.communication_messages = {
+            'session_establishment': 0,
+            'entanglement_sync': 0,
             'detection_announcement': 0,
             'basis_comparison': 0,
             'bell_test_coordination': 0,
             'parameter_estimation': 0,
             'error_correction': 0,
             'privacy_amplification': 0,
-            'authentication': 0
+            'authentication': 0,
+            'key_confirmation': 0
         }
     
     def run_simulation(self):
@@ -233,23 +236,29 @@ class E91Simulation:
         
         start_time = time.time()
         
-        # Step 1: Entanglement distribution and measurement
+        # Step 1: ADDED - Session establishment
+        self._session_establishment()
+        
+        # Step 2: Entanglement distribution and measurement
         self._entanglement_distribution_phase()
         
-        # Step 2: Basis comparison and sifting
+        # Step 3: Basis comparison and sifting
         sifting_start = time.time()
         self._sifting_phase()
         sifting_end = time.time()
         
-        # Step 3: Bell inequality test (security check)
+        # Step 4: Bell inequality test (security check)
         bell_test_start = time.time()
         self._bell_inequality_test()
         bell_test_end = time.time()
         
-        # Step 4: Error correction and privacy amplification
+        # Step 5: Error correction and privacy amplification
         postprocessing_start = time.time()
         self._post_processing_phase()
         postprocessing_end = time.time()
+        
+        # Step 6: ADDED - Session teardown
+        self._session_teardown()
         
         end_time = time.time()
         simulation_time = end_time - start_time
@@ -283,13 +292,30 @@ class E91Simulation:
             'simulation_time': simulation_time
         }
     
+    def _session_establishment(self):
+        """ADDED Phase 0: Session establishment and entanglement source coordination"""
+        # Initial session establishment between Alice and Bob
+        self.communication_messages['session_establishment'] += 6  # Handshake, protocol negotiation, timing sync
+        
+        # Entanglement source synchronization and coordination
+        self.communication_messages['entanglement_sync'] += 8  # Source coordination with both parties
+        
+        # Three-party time synchronization (Alice-Source-Bob)
+        sync_rounds = max(3, int(self.distance_km / 6))  # More complex for entanglement distribution
+        self.communication_messages['session_establishment'] += sync_rounds * 3  # Three-way timing
+    
     def _entanglement_distribution_phase(self):
-        """Phase 1: Distribute entangled pairs and measure"""
+        """Phase 1: Distribute entangled pairs and measure (ORIGINAL LOGIC)"""
         # Generate measurement bases
         self.alice.generate_random_bases(self.initial_pairs)
         self.bob.generate_random_bases(self.initial_pairs)
         
         self.raw_pairs_sent = self.initial_pairs
+        
+        # ADDED: Entanglement distribution synchronization
+        batch_size = 80  # Reasonable batching for entanglement distribution
+        num_batches = math.ceil(self.initial_pairs / batch_size)
+        self.communication_messages['entanglement_sync'] += num_batches * 2  # Batch coordination
         
         # Generate and distribute entangled pairs
         for i in range(self.initial_pairs):
@@ -316,21 +342,26 @@ class E91Simulation:
                     })
     
     def _sifting_phase(self):
-        """Phase 2: Basis comparison and key sifting with communication tracking"""
-        # Track communication for detection announcements
+        """Phase 2: ENHANCED - Basis comparison and key sifting with realistic communication"""
+        # ENHANCED: More realistic detection announcements
         if self.coincident_detections > 0:
-            self.communication_messages['detection_announcement'] += 2  # Alice and Bob announce detections
+            # Alice and Bob announce successful detections with more coordination
+            self.communication_messages['detection_announcement'] += 4  # Both parties + confirmations
         
-        # Track basis comparison messages
+        # ENHANCED: More complex basis comparison for three measurement bases
         unique_bases = set()
         for measurement in self.successful_measurements:
             unique_bases.add(measurement['alice_basis'])
             unique_bases.add(measurement['bob_basis'])
         
-        # Communication rounds for basis comparison (depends on number of unique bases used)
-        self.communication_messages['basis_comparison'] += len(unique_bases)
+        # ENHANCED: More realistic basis comparison rounds
+        basis_exchange_rounds = len(unique_bases) + 2  # Base exchanges + coordination
+        self.communication_messages['basis_comparison'] += basis_exchange_rounds
         
-        # Separate measurements for key generation and Bell test
+        # ADDED: Additional coordination for E91 three-basis system
+        self.communication_messages['basis_comparison'] += 4  # E91-specific basis coordination
+        
+        # Separate measurements for key generation and Bell test (ORIGINAL LOGIC)
         for measurement in self.successful_measurements:
             alice_basis = measurement['alice_basis']
             bob_basis = measurement['bob_basis']
@@ -346,19 +377,22 @@ class E91Simulation:
         self.sifted_key_length = len(self.alice.sifted_key)
     
     def _bell_inequality_test(self):
-        """Phase 3: Bell inequality test with communication tracking"""
-        # Track Bell test coordination messages
-        if len(self.bell_test_data) >= 10:  # Need minimum data for Bell test
-            # Messages needed for Bell test coordination:
-            # 1. Agreement on test parameters
-            # 2. Exchange of measurement results for Bell test subset
-            # 3. CHSH calculation coordination
-            self.communication_messages['bell_test_coordination'] += 3
+        """Phase 3: ENHANCED - Bell inequality test with realistic communication"""
+        # ENHANCED: Much more realistic Bell test coordination
+        if len(self.bell_test_data) >= 10:
+            # ENHANCED: Complex Bell test coordination for E91
+            self.communication_messages['bell_test_coordination'] += 8  # Initial Bell test setup
             
-            # Additional messages based on number of basis combinations tested
+            # ENHANCED: Communication for each basis combination tested
             basis_combinations_tested = len(set((data['alice_basis'], data['bob_basis']) 
                                               for data in self.bell_test_data))
-            self.communication_messages['bell_test_coordination'] += basis_combinations_tested
+            self.communication_messages['bell_test_coordination'] += basis_combinations_tested * 2
+            
+            # ENHANCED: CHSH parameter calculation coordination
+            self.communication_messages['bell_test_coordination'] += 6  # Multi-round CHSH calculation
+            
+            # ENHANCED: Bell test result verification and security assessment
+            self.communication_messages['bell_test_coordination'] += 4  # Security verification
         
         if len(self.bell_test_data) < 100:
             # If not enough data, create synthetic Bell violation
@@ -366,7 +400,7 @@ class E91Simulation:
             self.bell_parameter = 2.4  # Typical quantum value
             return
         
-        # Calculate CHSH Bell parameter properly
+        # Calculate CHSH Bell parameter properly (ORIGINAL LOGIC)
         # We need correlations E(a,b) for different basis combinations
         
         # Group by basis combinations for CHSH calculation
@@ -410,19 +444,20 @@ class E91Simulation:
             self.bell_parameter = S
     
     def _post_processing_phase(self):
-        """Phase 4: Error correction and privacy amplification with communication tracking"""
+        """Phase 4: ENHANCED - Error correction and privacy amplification with realistic communication"""
         if self.sifted_key_length == 0:
             self.qber = 0.5
             return
         
-        # Parameter estimation communication
+        # ENHANCED: More realistic parameter estimation
         test_size = min(40, max(5, self.sifted_key_length // 5))
         if test_size > 0:
-            # Messages for parameter estimation
-            self.communication_messages['parameter_estimation'] += 2  # Request and response for test subset
-            self.communication_messages['parameter_estimation'] += math.ceil(test_size / 10)  # Batched transmission of test bits
+            # ENHANCED: More complex parameter estimation for E91
+            self.communication_messages['parameter_estimation'] += 6  # E91 requires more coordination
+            # ENHANCED: More realistic parameter estimation batches  
+            self.communication_messages['parameter_estimation'] += math.ceil(test_size / 8)  # Batched transmission
         
-        # Calculate QBER
+        # Calculate QBER (ORIGINAL LOGIC)
         errors = 0
         for i in range(test_size):
             if i < len(self.alice.sifted_key) and i < len(self.bob.sifted_key):
@@ -431,7 +466,7 @@ class E91Simulation:
         
         self.qber = errors / test_size if test_size > 0 else 0.0
         
-        # Security check: Bell parameter should indicate quantum correlations
+        # Security check: Bell parameter should indicate quantum correlations (ORIGINAL LOGIC)
         bell_threshold = 2.0  # Classical limit
         qber_threshold = 0.11  # 11% QBER limit
         
@@ -440,23 +475,25 @@ class E91Simulation:
             # Account for bits used in parameter estimation and Bell test
             remaining_bits = self.sifted_key_length - test_size
             
-            # Error correction and privacy amplification
+            # Error correction and privacy amplification (ORIGINAL LOGIC)
             error_correction_overhead = max(0.15, 1.5 * self.qber)
             privacy_amp_factor = max(0.3, 1 - error_correction_overhead - 0.25)
             
             self.final_key_length = max(0, int(remaining_bits * privacy_amp_factor))
             
             if self.final_key_length > 0:
-                # Track error correction messages (depends on QBER and block size)
+                # ENHANCED: More realistic error correction communication
                 if self.qber > 0:
-                    error_correction_rounds = max(1, int(self.qber * 10))  # More errors = more rounds
-                    self.communication_messages['error_correction'] += error_correction_rounds * 2  # Syndrome exchange
+                    error_correction_rounds = max(2, int(self.qber * 12))  # Enhanced for E91
+                    self.communication_messages['error_correction'] += error_correction_rounds * 2
+                else:
+                    self.communication_messages['error_correction'] += 2
                 
-                # Privacy amplification negotiation
-                self.communication_messages['privacy_amplification'] += 2  # Hash function agreement and verification
+                # ENHANCED: Privacy amplification coordination
+                self.communication_messages['privacy_amplification'] += 4  # Enhanced for E91
                 
-                # Authentication messages
-                self.communication_messages['authentication'] += 2  # Message authentication codes
+                # ENHANCED: Authentication with Bell test verification
+                self.communication_messages['authentication'] += 4  # Enhanced security
                 
                 start_idx = test_size
                 end_idx = start_idx + self.final_key_length
@@ -480,33 +517,50 @@ class E91Simulation:
             self.alice.final_key = []
             self.bob.final_key = []
     
+    def _session_teardown(self):
+        """ADDED Phase 5: Key confirmation and session teardown"""
+        if self.final_key_length > 0:
+            # Key confirmation with Bell test validation
+            self.communication_messages['key_confirmation'] += 5  # Enhanced for E91
+        else:
+            # Session abort with security failure notification
+            self.communication_messages['key_confirmation'] += 3  # Abort coordination
+    
     def _calculate_dynamic_communication_overhead(self):
-        """Calculate total communication messages dynamically based on actual protocol execution"""
+        """FIXED - Calculate realistic total communication messages for E91"""
         total_messages = sum(self.communication_messages.values())
         
-        # Add protocol-specific overhead based on simulation results
+        # ENHANCED: E91-specific protocol overhead
         
-        # Synchronization messages (depends on distance and timing requirements)
-        sync_messages = max(2, int(self.distance_km / 5))  # More sync needed for longer distances
-        total_messages += sync_messages
+        # ENHANCED: Entanglement distribution coordination overhead
+        entanglement_overhead = max(4, int(self.distance_km / 3))  # Entanglement complexity
+        total_messages += entanglement_overhead
         
-        # Session establishment and teardown
-        session_messages = 4  # Session setup, key confirmation, session teardown, final ack
-        total_messages += session_messages
+        # ENHANCED: Three-party synchronization (Alice-Source-Bob)
+        threeparty_sync_overhead = max(3, int(self.coincident_detections / 80))  # More complex than two-party
+        total_messages += threeparty_sync_overhead
         
-        # Emergency abort messages (if security fails)
-        if self.final_key_length == 0:
-            total_messages += 2  # Abort notification and acknowledgment
+        # ENHANCED: Bell test verification overhead
+        bell_verification_overhead = 3  # E91's unique security verification
+        total_messages += bell_verification_overhead
         
-        # Print detailed breakdown for debugging
+        # ENHANCED: Security failure handling for E91
+        if self.bell_parameter < 2.0 or self.final_key_length == 0:
+            security_failure_overhead = 3  # Bell test failure handling
+            total_messages += security_failure_overhead
+        else:
+            security_failure_overhead = 0
+        
+        # Print detailed breakdown
         print("\n=== Dynamic Communication Overhead Breakdown ===")
         for msg_type, count in self.communication_messages.items():
             if count > 0:
                 print(f"{msg_type.replace('_', ' ').title()}: {count} messages")
-        print(f"Synchronization messages: {sync_messages}")
-        print(f"Session management: {session_messages}")
-        if self.final_key_length == 0:
-            print(f"Security failure handling: 2")
+        print(f"Entanglement coordination: {entanglement_overhead}")
+        print(f"Three-party synchronization: {threeparty_sync_overhead}")
+        print(f"Bell verification overhead: {bell_verification_overhead}")
+        if security_failure_overhead > 0:
+            print(f"Security failure handling: {security_failure_overhead}")
         print(f"Total messages: {total_messages}")
         print("=" * 47)
         

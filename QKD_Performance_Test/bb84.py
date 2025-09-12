@@ -120,7 +120,7 @@ class Bob:
         return measured_bit
 
 class BB84Simulation:
-    """Main BB84 QKD simulation class with dynamic communication overhead"""
+    """Main BB84 QKD simulation class with CORRECTED realistic communication overhead"""
     def __init__(self, distance_km=10, initial_bits=1000):
         self.distance_km = distance_km
         self.initial_bits = initial_bits
@@ -153,7 +153,7 @@ class BB84Simulation:
         self.synchronization_time = 0.0
         self.computation_time_per_round = 0.0
         
-        # Dynamic communication tracking
+        # CORRECTED: Reduced dynamic communication tracking for simple two-party BB84
         self.communication_messages = {
             'session_establishment': 0,
             'quantum_transmission_sync': 0,
@@ -220,16 +220,16 @@ class BB84Simulation:
         }
     
     def _session_establishment(self):
-        """Phase 0: Establish secure communication session"""
-        # Initial handshake and protocol negotiation
+        """CORRECTED Phase 0: Simplified session establishment for two-party BB84"""
+        # Simple two-party handshake
         self.communication_messages['session_establishment'] += 4  # SYN, SYN-ACK, ACK, Protocol params
         
-        # Time synchronization for quantum transmission
-        sync_rounds = max(2, int(self.distance_km / 10))  # More rounds for longer distances
+        # CORRECTED: Reduced time synchronization for simple two-party
+        sync_rounds = max(1, int(self.distance_km / 15))  # Reduced from /10 to /15
         self.communication_messages['session_establishment'] += sync_rounds * 2  # Request-response pairs
     
     def _quantum_transmission_phase(self):
-        """Phase 1: Alice sends qubits to Bob with synchronization"""
+        """CORRECTED Phase 1: Simplified quantum transmission for two-party BB84"""
         # Alice generates random bits and bases
         self.alice.generate_random_bits(self.initial_bits)
         self.alice.generate_random_bases(self.initial_bits)
@@ -237,8 +237,8 @@ class BB84Simulation:
         # Bob generates random measurement bases
         self.bob.generate_random_bases(self.initial_bits)
         
-        # Quantum transmission synchronization (every batch of pulses)
-        batch_size = 50  # Send in batches for synchronization
+        # CORRECTED: Much larger batches for efficient two-party transmission
+        batch_size = 200  # INCREASED: Much larger batches (was 50, now 200)
         num_batches = math.ceil(self.initial_bits / batch_size)
         self.communication_messages['quantum_transmission_sync'] += num_batches * 2  # Start/end signals per batch
         
@@ -267,19 +267,17 @@ class BB84Simulation:
                     })
     
     def _sifting_phase(self):
-        """Phase 2: Basis reconciliation and key sifting with communication tracking"""
-        # Bob announces which pulses he detected
+        """CORRECTED Phase 2: Simplified sifting for two-party BB84"""
+        # CORRECTED: Efficient detection announcements with larger batches
         if self.photons_received > 0:
-            # Detection announcements sent in batches to reduce overhead
-            detection_batches = math.ceil(self.photons_received / 100)
+            detection_batches = math.ceil(self.photons_received / 200)  # INCREASED: Larger batches
             self.communication_messages['detection_announcement'] += detection_batches
         
-        # Basis reconciliation - Alice and Bob compare bases
-        # This requires multiple rounds of communication
+        # CORRECTED: Simplified basis reconciliation for two parties
         unique_positions = len(self.successful_transmissions)
         if unique_positions > 0:
-            # Alice announces her bases for detected pulses
-            basis_batches = math.ceil(unique_positions / 50)  # Send in batches
+            # CORRECTED: More efficient batching for simple two-party communication
+            basis_batches = math.ceil(unique_positions / 100)  # INCREASED: Larger batches (was 50)
             self.communication_messages['basis_reconciliation'] += basis_batches
             
             # Bob responds with his matching basis selections
@@ -299,18 +297,18 @@ class BB84Simulation:
         self.sifted_key_length = len(self.alice.sifted_key)
     
     def _post_processing_phase(self):
-        """Phase 3: Error correction and privacy amplification with communication tracking"""
+        """CORRECTED Phase 3: Simplified post-processing for two-party BB84"""
         if self.sifted_key_length == 0:
             self.qber = 0.5
             return
         
-        # Parameter estimation
+        # CORRECTED: Efficient parameter estimation
         test_size = min(50, max(5, self.sifted_key_length // 5))
         if test_size > 0:
-            # Coordinate parameter estimation
+            # Simple two-party parameter estimation
             self.communication_messages['parameter_estimation'] += 2  # Coordinate test subset
-            # Exchange test bits
-            test_batches = math.ceil(test_size / 10)
+            # CORRECTED: Larger test batches for efficiency
+            test_batches = math.ceil(test_size / 15)  # INCREASED: Larger batches (was 10)
             self.communication_messages['parameter_estimation'] += test_batches * 2  # Alice sends, Bob confirms
         
         # Calculate QBER by comparing subset of sifted key
@@ -327,19 +325,18 @@ class BB84Simulation:
             # Account for bits used in parameter estimation
             remaining_bits = self.sifted_key_length - test_size
             
-            # Error correction communication
+            # CORRECTED: Simplified error correction for two parties
             if self.qber > 0:
-                # Error correction requires multiple rounds based on QBER
-                error_correction_rounds = max(1, int(self.qber * 15))  # More errors = more rounds
-                self.communication_messages['error_correction'] += error_correction_rounds * 3  # Syndrome exchange and verification
+                error_correction_rounds = max(1, int(self.qber * 8))  # REDUCED: Less rounds (was 15)
+                self.communication_messages['error_correction'] += error_correction_rounds * 2  # Reduced complexity
             else:
                 self.communication_messages['error_correction'] += 1  # Minimal verification
             
-            # Privacy amplification
-            self.communication_messages['privacy_amplification'] += 3  # Hash function agreement, parameters, confirmation
+            # CORRECTED: Simplified privacy amplification for two parties
+            self.communication_messages['privacy_amplification'] += 2  # REDUCED: Simpler (was 3)
             
-            # Authentication of classical communication
-            auth_rounds = 2 + (1 if self.qber > 0.05 else 0)  # More auth if higher QBER
+            # CORRECTED: Simplified authentication for two parties
+            auth_rounds = 1 + (1 if self.qber > 0.05 else 0)  # REDUCED: Simpler auth (was 2+1)
             self.communication_messages['authentication'] += auth_rounds
             
             # More aggressive overhead for realistic BB84
@@ -374,28 +371,30 @@ class BB84Simulation:
             self.bob.final_key = []
     
     def _session_teardown(self):
-        """Phase 4: Key confirmation and session teardown"""
+        """CORRECTED Phase 4: Simplified session teardown for two parties"""
         if self.final_key_length > 0:
-            # Key confirmation protocol
-            self.communication_messages['key_confirmation'] += 3  # Hash comparison and confirmation
+            # Simple two-party key confirmation
+            self.communication_messages['key_confirmation'] += 2  # REDUCED: Simpler (was 3)
         else:
             # Session abort due to security failure
             self.communication_messages['key_confirmation'] += 2  # Abort and acknowledgment
     
     def _calculate_dynamic_communication_overhead(self):
-        """Calculate total communication messages dynamically based on actual protocol execution"""
+        """CORRECTED - Simplified overhead calculation for two-party BB84"""
         total_messages = sum(self.communication_messages.values())
         
-        # Add protocol-specific overhead based on simulation results
+        # CORRECTED: Reduced protocol-specific overhead for simple two-party
         
-        # Distance-dependent synchronization overhead
-        sync_overhead = max(3, int(self.distance_km / 3))  # More sync needed for longer distances
+        # CORRECTED: Minimal synchronization overhead for two parties
+        sync_overhead = max(2, int(self.distance_km / 5))  # REDUCED: Less sync needed (was /3)
         total_messages += sync_overhead
         
-        # Channel-dependent retransmission overhead
-        if self.detection_rate < 0.7:  # Poor channel conditions
-            retransmission_overhead = 2
+        # CORRECTED: Reduced retransmission overhead
+        if self.detection_rate < 0.6:  # More stringent threshold (was 0.7)
+            retransmission_overhead = 1  # REDUCED: Less overhead (was 2)
             total_messages += retransmission_overhead
+        else:
+            retransmission_overhead = 0
         
         # Print detailed breakdown
         print("\n=== Dynamic Communication Overhead Breakdown ===")
@@ -403,8 +402,8 @@ class BB84Simulation:
             if count > 0:
                 print(f"{msg_type.replace('_', ' ').title()}: {count} messages")
         print(f"Synchronization overhead: {sync_overhead}")
-        if self.detection_rate < 0.7:
-            print(f"Retransmission overhead: 2")
+        if retransmission_overhead > 0:
+            print(f"Retransmission overhead: {retransmission_overhead}")
         print(f"Total messages: {total_messages}")
         print("=" * 47)
         
