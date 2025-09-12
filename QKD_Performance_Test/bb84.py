@@ -128,7 +128,7 @@ class BB84Simulation:
         self.alice = Alice()
         self.bob = Bob()
         
-        # Initialize channel models (same as MDI-QKD)
+        # Initialize channel models
         self.loss_model = FibreLossModel(p_loss_init=0.0, p_loss_length=0.2)
         self.delay_model = FibreDelayModel(c=2e5)
         self.noise_model = DepolarNoiseModel(depolar_rate=0.005)
@@ -356,7 +356,7 @@ class BB84Simulation:
 
 def main():
     """Main function to run the BB84 simulation"""
-    # Create and run simulation with same parameters as MDI-QKD
+    # Create and run simulator
     simulation = BB84Simulation(distance_km=10, initial_bits=1000)
     results = simulation.run_simulation()
     
