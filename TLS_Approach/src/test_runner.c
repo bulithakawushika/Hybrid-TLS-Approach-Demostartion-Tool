@@ -10,6 +10,8 @@
 #include "config.h"
 #include "qkd_interface.h"
 #include "classical_crypto.h"
+#include "pqc_crypto.h"
+#include "mac_ops.h"
 
 // External QKD key data from stage.c
 qkd_key_data_t bb84_data = {0};
@@ -27,7 +29,6 @@ double get_time_us() {
 
 /**
  * Initialize mock QKD data for testing
- * In real implementation, this would interface with actual stage.c data
  */
 void initialize_mock_qkd_data() {
     // Mock BB84 data
@@ -79,7 +80,7 @@ int test_classical_operations(const test_config_t* config, performance_metrics_t
         return -1;
     }
     end_time = get_time_us();
-    metrics->classical_keygen_time = (end_time - start_time) / 1000.0; // Convert to milliseconds
+    metrics->classical_keygen_time = (end_time - start_time) / 1000.0;
     
     printf("    Classical key generation: %.3f ms\n", metrics->classical_keygen_time);
     
@@ -171,10 +172,204 @@ int test_classical_operations(const test_config_t* config, performance_metrics_t
 }
 
 /**
- * Test QKD key derivation
+ * Test Post-Quantum Cryptography operations
  */
-int test_qkd_operations(const test_config_t* config, performance_metrics_t* metrics) {
-    printf("  Testing QKD operations...\n");
+int test_pqc_operations(const test_config_t* config, performance_metrics_t* metrics) {
+    printf("  Testing PQC operations...\n");
+    
+    // Test PQC KEM operations
+    printf("    Testing %s KEM...\n", pqc_kem_names[config->pqc_kem]);
+    
+    if (!is_kem_supported(config->pqc_kem)) {
+        fprintf(stderr, "    KEM algorithm %s not supported in this LibOQS build\n", 
+                pqc_kem_names[config->pqc_kem]);
+        return -1;
+    }
+    
+    pqc_kem_keypair_t kem_keypair = {0};
+    double start_time, end_time;
+    
+    // Generate KEM keypair
+    start_time = get_time_us();
+    if (pqc_kem_keygen(config->pqc_kem, &kem_keypair) != 0) {
+        fprintf(stderr, "    Failed to generate PQC KEM keypair\n");
+        return -1;
+    }
+    end_time = get_time_us();
+    metrics->pqc_keygen_time = (end_time - start_time) / 1000.0;
+    
+    printf("    PQC KEM key generation: %.3f ms\n", metrics->pqc_keygen_time);
+    printf("    Public key size: %zu bytes, Secret key size: %zu bytes\n",
+           kem_keypair.public_key_len, kem_keypair.secret_key_len);
+    
+    // Allocate buffers based on actual algorithm requirements
+    size_t max_shared_secret_len, max_ciphertext_len;
+    if (get_pqc_kem_sizes(config->pqc_kem, NULL, NULL, &max_ciphertext_len, &max_shared_secret_len) != 0) {
+        fprintf(stderr, "    Failed to get KEM algorithm sizes\n");
+        free_pqc_kem_keypair(&kem_keypair);
+        return -1;
+    }
+    
+    // Allocate buffers with proper sizes
+    unsigned char* shared_secret_encap = malloc(max_shared_secret_len);
+    unsigned char* ciphertext = malloc(max_ciphertext_len);
+    unsigned char* shared_secret_decap = malloc(max_shared_secret_len);
+    
+    if (shared_secret_encap == NULL || ciphertext == NULL || shared_secret_decap == NULL) {
+        fprintf(stderr, "    Failed to allocate KEM buffers\n");
+        free(shared_secret_encap);
+        free(ciphertext);
+        free(shared_secret_decap);
+        free_pqc_kem_keypair(&kem_keypair);
+        return -1;
+    }
+    
+    size_t shared_secret_len = max_shared_secret_len;
+    size_t ciphertext_len = max_ciphertext_len;
+    
+    // Test encapsulation
+    start_time = get_time_us();
+    if (pqc_kem_encapsulate(config->pqc_kem, 
+                           kem_keypair.public_key, kem_keypair.public_key_len,
+                           shared_secret_encap, &shared_secret_len,
+                           ciphertext, &ciphertext_len) != 0) {
+        fprintf(stderr, "    PQC KEM encapsulation failed\n");
+        free(shared_secret_encap);
+        free(ciphertext);
+        free(shared_secret_decap);
+        free_pqc_kem_keypair(&kem_keypair);
+        return -1;
+    }
+    end_time = get_time_us();
+    metrics->pqc_encap_time = (end_time - start_time) / 1000.0;
+    
+    // Test decapsulation
+    size_t shared_secret_decap_len = max_shared_secret_len;
+    
+    start_time = get_time_us();
+    if (pqc_kem_decapsulate(config->pqc_kem,
+                           kem_keypair.secret_key, kem_keypair.secret_key_len,
+                           ciphertext, ciphertext_len,
+                           shared_secret_decap, &shared_secret_decap_len) != 0) {
+        fprintf(stderr, "    PQC KEM decapsulation failed\n");
+        free(shared_secret_encap);
+        free(ciphertext);
+        free(shared_secret_decap);
+        free_pqc_kem_keypair(&kem_keypair);
+        return -1;
+    }
+    end_time = get_time_us();
+    metrics->pqc_decap_time = (end_time - start_time) / 1000.0;
+    
+    // Verify shared secrets match
+    if (shared_secret_len != shared_secret_decap_len ||
+        memcmp(shared_secret_encap, shared_secret_decap, shared_secret_len) != 0) {
+        fprintf(stderr, "    PQC KEM shared secrets don't match!\n");
+        free(shared_secret_encap);
+        free(ciphertext);
+        free(shared_secret_decap);
+        free_pqc_kem_keypair(&kem_keypair);
+        return -1;
+    }
+    
+    printf("    PQC KEM encap: %.3f ms, decap: %.3f ms\n", 
+           metrics->pqc_encap_time, metrics->pqc_decap_time);
+    printf("    Shared secret length: %zu bytes, Ciphertext length: %zu bytes\n",
+           shared_secret_len, ciphertext_len);
+    
+    // Cleanup KEM buffers
+    free(shared_secret_encap);
+    free(ciphertext);
+    free(shared_secret_decap);
+    
+    // Test PQC signatures
+    printf("    Testing %s signatures...\n", pqc_sig_names[config->pqc_sig]);
+    
+    if (!is_sig_supported(config->pqc_sig)) {
+        fprintf(stderr, "    Signature algorithm %s not supported in this LibOQS build\n", 
+                pqc_sig_names[config->pqc_sig]);
+        free_pqc_kem_keypair(&kem_keypair);
+        return -1;
+    }
+    
+    pqc_sig_keypair_t sig_keypair = {0};
+    
+    // Generate signature keypair
+    if (pqc_sig_keygen(config->pqc_sig, &sig_keypair) != 0) {
+        fprintf(stderr, "    Failed to generate PQC signature keypair\n");
+        free_pqc_kem_keypair(&kem_keypair);
+        return -1;
+    }
+    
+    // Get signature size for buffer allocation
+    size_t max_sig_len;
+    if (get_pqc_sig_sizes(config->pqc_sig, NULL, NULL, &max_sig_len) != 0) {
+        fprintf(stderr, "    Failed to get signature algorithm sizes\n");
+        free_pqc_kem_keypair(&kem_keypair);
+        free_pqc_sig_keypair(&sig_keypair);
+        return -1;
+    }
+    
+    // Allocate signature buffer on heap to handle large signatures
+    unsigned char* pqc_signature = malloc(max_sig_len);
+    if (pqc_signature == NULL) {
+        fprintf(stderr, "    Failed to allocate signature buffer (%zu bytes)\n", max_sig_len);
+        free_pqc_kem_keypair(&kem_keypair);
+        free_pqc_sig_keypair(&sig_keypair);
+        return -1;
+    }
+    
+    const unsigned char test_message[] = "This is a test message for PQC signatures";
+    size_t pqc_signature_len = max_sig_len;
+    
+    // Test signing
+    start_time = get_time_us();
+    if (pqc_sign(config->pqc_sig,
+                sig_keypair.secret_key, sig_keypair.secret_key_len,
+                test_message, sizeof(test_message) - 1,
+                pqc_signature, &pqc_signature_len) != 0) {
+        fprintf(stderr, "    PQC signature generation failed\n");
+        free(pqc_signature);
+        free_pqc_kem_keypair(&kem_keypair);
+        free_pqc_sig_keypair(&sig_keypair);
+        return -1;
+    }
+    end_time = get_time_us();
+    metrics->pqc_sign_time = (end_time - start_time) / 1000.0;
+    
+    // Test verification
+    start_time = get_time_us();
+    if (pqc_verify(config->pqc_sig,
+                  sig_keypair.public_key, sig_keypair.public_key_len,
+                  test_message, sizeof(test_message) - 1,
+                  pqc_signature, pqc_signature_len) != 0) {
+        fprintf(stderr, "    PQC signature verification failed\n");
+        free(pqc_signature);
+        free_pqc_kem_keypair(&kem_keypair);
+        free_pqc_sig_keypair(&sig_keypair);
+        return -1;
+    }
+    end_time = get_time_us();
+    metrics->pqc_verify_time = (end_time - start_time) / 1000.0;
+    
+    printf("    PQC signature: %.3f ms, verification: %.3f ms\n", 
+           metrics->pqc_sign_time, metrics->pqc_verify_time);
+    printf("    Signature size: %zu bytes\n", pqc_signature_len);
+    
+    // Cleanup
+    free(pqc_signature);
+    free_pqc_kem_keypair(&kem_keypair);
+    free_pqc_sig_keypair(&sig_keypair);
+    
+    printf("    PQC operations completed successfully\n");
+    return 0;
+}
+
+/**
+ * Test QKD key derivation and MAC operations
+ */
+int test_qkd_and_mac_operations(const test_config_t* config, performance_metrics_t* metrics) {
+    printf("  Testing QKD and MAC operations...\n");
     
     qkd_key_data_t qkd_key;
     unsigned char k_qkd[32], k_auth[32], na[12], nb[12];
@@ -199,14 +394,37 @@ int test_qkd_operations(const test_config_t* config, performance_metrics_t* metr
     metrics->qkd_derive_time = (end_time - start_time) / 1000.0;
     
     printf("    QKD key derivation: %.3f ms\n", metrics->qkd_derive_time);
+    
+    // Test MAC operations with derived keys
+    const unsigned char test_message[] = "Test message for MAC operations";
+    unsigned char mac[POLY1305_TAG_SIZE];
+    
+    start_time = get_time_us();
+    if (poly1305_generate_mac(k_auth, na, test_message, sizeof(test_message) - 1, mac) != MAC_SUCCESS) {
+        fprintf(stderr, "    MAC generation failed\n");
+        return -1;
+    }
+    end_time = get_time_us();
+    metrics->mac_compute_time = (end_time - start_time) / 1000.0;
+    
+    start_time = get_time_us();
+    if (poly1305_verify_mac(k_auth, na, test_message, sizeof(test_message) - 1, mac) != MAC_SUCCESS) {
+        fprintf(stderr, "    MAC verification failed\n");
+        return -1;
+    }
+    end_time = get_time_us();
+    metrics->mac_verify_time = (end_time - start_time) / 1000.0;
+    
+    printf("    MAC generation: %.3f ms, verification: %.3f ms\n", 
+           metrics->mac_compute_time, metrics->mac_verify_time);
     printf("    Derived k_qkd: ");
     for (int i = 0; i < 8; i++) printf("%02x", k_qkd[i]);
     printf("...\n");
-    printf("    Derived k_auth: ");
-    for (int i = 0; i < 8; i++) printf("%02x", k_auth[i]);
-    printf("...\n");
+    printf("    MAC: ");
+    print_mac_hex(mac);
+    printf("\n");
     
-    printf("    QKD operations completed successfully\n");
+    printf("    QKD and MAC operations completed successfully\n");
     return 0;
 }
 
@@ -227,14 +445,17 @@ int run_single_test(const test_config_t* config) {
         return -1;
     }
     
-    // Test QKD operations
-    if (test_qkd_operations(config, &metrics) != 0) {
-        printf("❌ Test %d FAILED: QKD operations\n", config->test_id);
+    // Test PQC operations
+    if (test_pqc_operations(config, &metrics) != 0) {
+        printf("❌ Test %d FAILED: PQC operations\n", config->test_id);
         return -1;
     }
     
-    // TODO: Add PQC operations testing when implemented
-    printf("  PQC operations: Not yet implemented\n");
+    // Test QKD and MAC operations
+    if (test_qkd_and_mac_operations(config, &metrics) != 0) {
+        printf("❌ Test %d FAILED: QKD/MAC operations\n", config->test_id);
+        return -1;
+    }
     
     total_end_time = get_time_us();
     metrics.total_handshake_time = (total_end_time - total_start_time) / 1000.0;
@@ -288,6 +509,12 @@ int main(int argc, char* argv[]) {
     SSL_load_error_strings();
     OpenSSL_add_all_algorithms();
     
+    // Initialize LibOQS
+    if (initialize_liboqs() != 0) {
+        fprintf(stderr, "Failed to initialize LibOQS\n");
+        return 1;
+    }
+    
     // Initialize mock QKD data
     initialize_mock_qkd_data();
     
@@ -302,6 +529,7 @@ int main(int argc, char* argv[]) {
         test_config_t* all_tests = malloc(calculate_total_combinations() * sizeof(test_config_t));
         if (all_tests == NULL) {
             fprintf(stderr, "Failed to allocate memory for test matrix\n");
+            cleanup_liboqs();
             return 1;
         }
         
@@ -322,9 +550,12 @@ int main(int argc, char* argv[]) {
         printf("Passed: %d/%d tests\n", passed, total_tests);
         
         free(all_tests);
+        cleanup_liboqs();
         return (passed == total_tests) ? 0 : 1;
     } else {
         // Run basic test suite
-        return run_basic_test_suite() == 0 ? 0 : 1;
+        int result = run_basic_test_suite();
+        cleanup_liboqs();
+        return result == 0 ? 0 : 1;
     }
 }
