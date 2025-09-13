@@ -1,0 +1,351 @@
+#include <stdio.h>
+#include <stdlib.h>
+#include <string.h>
+#include <unistd.h>
+#include <sys/wait.h>
+#include <openssl/evp.h>
+#include <openssl/sha.h>
+#include <cjson/cJSON.h>
+
+// Configuration constants
+#define MAX_RETRIES 100
+#define MAX_OUTPUT_SIZE 8192
+#define MAX_KEY_SIZE 2048
+#define SHA3_512_DIGEST_LENGTH 64
+#define SHA256_DIGEST_LENGTH 32
+#define UUID_LENGTH 16  // 128 bits = 16 bytes
+
+// Global storage for QKD keys and UUIDs
+typedef struct {
+    unsigned char kqkdm[SHA3_512_DIGEST_LENGTH];  // SHA3-512 hash of original key
+    unsigned char uuid[UUID_LENGTH];              // First 128 bits of SHA-256 hash
+    int valid;                                    // Flag to indicate if data is valid
+} qkd_key_data_t;
+
+// Global QKD key storage
+qkd_key_data_t bb84_data = {0};
+qkd_key_data_t e91_data = {0};
+qkd_key_data_t mdi_data = {0};
+
+/**
+ * Execute a Python QKD script and capture its output
+ */
+int execute_qkd_script(const char* script_path, char* output, size_t output_size) {
+    char command[512];
+    snprintf(command, sizeof(command), 
+             "cd QKD_Scripts && python3 %s --distance 10 --format json --quiet", 
+             script_path);
+    
+    FILE* fp = popen(command, "r");
+    if (fp == NULL) {
+        fprintf(stderr, "Failed to execute command: %s\n", command);
+        return -1;
+    }
+    
+    size_t total_read = 0;
+    size_t bytes_read;
+    
+    // Read output from the script
+    while ((bytes_read = fread(output + total_read, 1, 
+                              output_size - total_read - 1, fp)) > 0) {
+        total_read += bytes_read;
+        if (total_read >= output_size - 1) {
+            break;
+        }
+    }
+    
+    output[total_read] = '\0';
+    
+    int status = pclose(fp);
+    if (WIFEXITED(status)) {
+        return WEXITSTATUS(status);
+    }
+    
+    return -1;
+}
+
+/**
+ * Parse JSON output from QKD script and extract key and success status
+ */
+int parse_qkd_result(const char* json_output, char* key, size_t key_size, int* success) {
+    cJSON* json = cJSON_Parse(json_output);
+    if (json == NULL) {
+        fprintf(stderr, "Failed to parse JSON output\n");
+        return -1;
+    }
+    
+    // Get success status
+    cJSON* success_item = cJSON_GetObjectItem(json, "success");
+    if (!cJSON_IsBool(success_item)) {
+        fprintf(stderr, "Missing or invalid 'success' field in JSON\n");
+        cJSON_Delete(json);
+        return -1;
+    }
+    *success = cJSON_IsTrue(success_item);
+    
+    // If successful, get the key
+    if (*success) {
+        cJSON* alice_key = cJSON_GetObjectItem(json, "alice_key");
+        if (!cJSON_IsString(alice_key)) {
+            fprintf(stderr, "Missing or invalid 'alice_key' field in JSON\n");
+            cJSON_Delete(json);
+            return -1;
+        }
+        
+        strncpy(key, cJSON_GetStringValue(alice_key), key_size - 1);
+        key[key_size - 1] = '\0';
+    }
+    
+    cJSON_Delete(json);
+    return 0;
+}
+
+/**
+ * Compute SHA3-512 hash of input data
+ */
+int hash_sha3_512(const char* input, unsigned char* output) {
+    EVP_MD_CTX* ctx = EVP_MD_CTX_new();
+    if (ctx == NULL) {
+        return -1;
+    }
+    
+    if (EVP_DigestInit_ex(ctx, EVP_sha3_512(), NULL) != 1) {
+        EVP_MD_CTX_free(ctx);
+        return -1;
+    }
+    
+    if (EVP_DigestUpdate(ctx, input, strlen(input)) != 1) {
+        EVP_MD_CTX_free(ctx);
+        return -1;
+    }
+    
+    unsigned int digest_len;
+    if (EVP_DigestFinal_ex(ctx, output, &digest_len) != 1) {
+        EVP_MD_CTX_free(ctx);
+        return -1;
+    }
+    
+    EVP_MD_CTX_free(ctx);
+    return 0;
+}
+
+/**
+ * Compute SHA-256 hash and extract first 128 bits (16 bytes)
+ */
+int hash_sha256_128bits(const char* input, unsigned char* output) {
+    unsigned char full_hash[SHA256_DIGEST_LENGTH];
+    
+    EVP_MD_CTX* ctx = EVP_MD_CTX_new();
+    if (ctx == NULL) {
+        return -1;
+    }
+    
+    if (EVP_DigestInit_ex(ctx, EVP_sha256(), NULL) != 1) {
+        EVP_MD_CTX_free(ctx);
+        return -1;
+    }
+    
+    if (EVP_DigestUpdate(ctx, input, strlen(input)) != 1) {
+        EVP_MD_CTX_free(ctx);
+        return -1;
+    }
+    
+    unsigned int digest_len;
+    if (EVP_DigestFinal_ex(ctx, full_hash, &digest_len) != 1) {
+        EVP_MD_CTX_free(ctx);
+        return -1;
+    }
+    
+    EVP_MD_CTX_free(ctx);
+    
+    // Copy first 128 bits (16 bytes)
+    memcpy(output, full_hash, UUID_LENGTH);
+    return 0;
+}
+
+/**
+ * Print hex representation of binary data
+ */
+void print_hex(const unsigned char* data, size_t len) {
+    for (size_t i = 0; i < len; i++) {
+        printf("%02x", data[i]);
+    }
+}
+
+/**
+ * Process a single QKD protocol and generate keys
+ */
+int process_qkd_protocol(const char* protocol_name, const char* script_name, 
+                        qkd_key_data_t* key_data) {
+    char output[MAX_OUTPUT_SIZE];
+    char original_key[MAX_KEY_SIZE];
+    int success = 0;
+    int retry_count = 0;
+    
+    printf("Starting %s key generation...\n", protocol_name);
+    
+    // Retry until successful or max retries reached
+    do {
+        retry_count++;
+        printf("  Attempt %d: Executing %s...\n", retry_count, script_name);
+        
+        // Execute the QKD script
+        int exit_code = execute_qkd_script(script_name, output, sizeof(output));
+        
+        if (exit_code == 0) {
+            // Parse the output
+            if (parse_qkd_result(output, original_key, sizeof(original_key), &success) == 0) {
+                if (success) {
+                    printf("  %s key generation successful! Key length: %zu bits\n", 
+                           protocol_name, strlen(original_key));
+                    break;
+                } else {
+                    printf("  %s key generation failed (QBER too high or insufficient bits)\n", 
+                           protocol_name);
+                }
+            } else {
+                printf("  Failed to parse %s script output\n", protocol_name);
+            }
+        } else {
+            printf("  %s script execution failed with exit code: %d\n", 
+                   protocol_name, exit_code);
+        }
+        
+        if (retry_count >= MAX_RETRIES) {
+            fprintf(stderr, "  Maximum retries (%d) reached for %s\n", 
+                    MAX_RETRIES, protocol_name);
+            return -1;
+        }
+        
+        printf("  Retrying %s key generation...\n", protocol_name);
+        sleep(1); // Brief delay before retry
+        
+    } while (!success);
+    
+    // Generate kqkdm (SHA3-512 of original key)
+    if (hash_sha3_512(original_key, key_data->kqkdm) != 0) {
+        fprintf(stderr, "Failed to generate SHA3-512 hash for %s\n", protocol_name);
+        return -1;
+    }
+    
+    // Generate uuid (first 128 bits of SHA-256 of original key)
+    if (hash_sha256_128bits(original_key, key_data->uuid) != 0) {
+        fprintf(stderr, "Failed to generate SHA-256 hash for %s\n", protocol_name);
+        return -1;
+    }
+    
+    key_data->valid = 1;
+    
+    printf("  Generated kqkdm_%s (SHA3-512): ", protocol_name);
+    print_hex(key_data->kqkdm, SHA3_512_DIGEST_LENGTH);
+    printf("\n");
+    
+    printf("  Generated uuid_%s (SHA-256 128-bit): ", protocol_name);
+    print_hex(key_data->uuid, UUID_LENGTH);
+    printf("\n");
+    
+    printf("Complete %s Key management successfully.\n\n", protocol_name);
+    
+    // Clear the original key from memory for security
+    memset(original_key, 0, sizeof(original_key));
+    
+    return 0;
+}
+
+/**
+ * Clean up sensitive data from memory
+ */
+void cleanup_memory() {
+    // Clear all sensitive key material
+    memset(&bb84_data, 0, sizeof(bb84_data));
+    memset(&e91_data, 0, sizeof(e91_data));
+    memset(&mdi_data, 0, sizeof(mdi_data));
+}
+
+/**
+ * Display summary of all generated keys
+ */
+void display_summary() {
+    printf("=== QKD Key Management Summary ===\n");
+    
+    if (bb84_data.valid) {
+        printf("BB84 - Status: SUCCESS\n");
+        printf("  kqkdm_bb84: ");
+        print_hex(bb84_data.kqkdm, SHA3_512_DIGEST_LENGTH);
+        printf("\n  uuid_bb84:  ");
+        print_hex(bb84_data.uuid, UUID_LENGTH);
+        printf("\n");
+    } else {
+        printf("BB84 - Status: FAILED\n");
+    }
+    
+    if (e91_data.valid) {
+        printf("E91  - Status: SUCCESS\n");
+        printf("  kqkdm_e91:  ");
+        print_hex(e91_data.kqkdm, SHA3_512_DIGEST_LENGTH);
+        printf("\n  uuid_e91:   ");
+        print_hex(e91_data.uuid, UUID_LENGTH);
+        printf("\n");
+    } else {
+        printf("E91  - Status: FAILED\n");
+    }
+    
+    if (mdi_data.valid) {
+        printf("MDI  - Status: SUCCESS\n");
+        printf("  kqkdm_mdi:  ");
+        print_hex(mdi_data.kqkdm, SHA3_512_DIGEST_LENGTH);
+        printf("\n  uuid_mdi:   ");
+        print_hex(mdi_data.uuid, UUID_LENGTH);
+        printf("\n");
+    } else {
+        printf("MDI  - Status: FAILED\n");
+    }
+    
+    printf("=====================================\n");
+}
+
+/**
+ * Main function
+ */
+int main(int argc, char* argv[]) {
+    printf("=== QKD Key Generation Stage ===\n");
+    printf("Generating quantum keys for hybrid TLS implementation...\n\n");
+    
+    // Initialize OpenSSL
+    OpenSSL_add_all_digests();
+    
+    // Process BB84
+    if (process_qkd_protocol("BB84", "bb84_keygen.py", &bb84_data) != 0) {
+        fprintf(stderr, "Failed to process BB84 protocol\n");
+        goto cleanup;
+    }
+    
+    // Process E91
+    if (process_qkd_protocol("E91", "e91_keygen.py", &e91_data) != 0) {
+        fprintf(stderr, "Failed to process E91 protocol\n");
+        goto cleanup;
+    }
+    
+    // Process MDI-QKD
+    if (process_qkd_protocol("MDI-QKD", "mdi_keygen.py", &mdi_data) != 0) {
+        fprintf(stderr, "Failed to process MDI-QKD protocol\n");
+        goto cleanup;
+    }
+    
+    // Display summary
+    display_summary();
+    
+    printf("All QKD protocols processed successfully!\n");
+    printf("Keys are stored in memory and ready for TLS integration.\n");
+    
+    // In a real implementation, you might want to keep the program running
+    // or save the keys to a secure storage mechanism for the TLS process to use
+    printf("\nPress Enter to clear keys and exit...");
+    getchar();
+    
+cleanup:
+    cleanup_memory();
+    EVP_cleanup();
+    
+    return 0;
+}
