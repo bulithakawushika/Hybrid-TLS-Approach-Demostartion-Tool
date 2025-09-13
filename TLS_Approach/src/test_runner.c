@@ -1,3 +1,4 @@
+#define _GNU_SOURCE
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
@@ -55,6 +56,7 @@ int test_classical_operations(const test_config_t* config, performance_metrics_t
     
     classical_keypair_t alice_keypair = {0};
     classical_keypair_t bob_keypair = {0};
+    classical_keypair_t sig_keypair = {0};
     unsigned char shared_secret_alice[64] = {0};
     unsigned char shared_secret_bob[64] = {0};
     size_t shared_secret_len_alice = sizeof(shared_secret_alice);
@@ -62,7 +64,7 @@ int test_classical_operations(const test_config_t* config, performance_metrics_t
     
     double start_time, end_time;
     
-    // Test classical key generation
+    // Test classical key generation for key exchange
     printf("    Generating %s keypairs...\n", classical_kex_names[config->classical_kex]);
     
     start_time = get_time_us();
@@ -113,20 +115,28 @@ int test_classical_operations(const test_config_t* config, performance_metrics_t
     
     printf("    Key agreement successful! Shared secret length: %zu bytes\n", shared_secret_len_alice);
     
-    // Test digital signatures
+    // Test digital signatures - generate separate signature keypair
     printf("    Testing %s signatures...\n", classical_sig_names[config->classical_sig]);
+    
+    if (classical_sig_keygen(config->classical_sig, &sig_keypair) != 0) {
+        fprintf(stderr, "    Failed to generate signature keypair\n");
+        free_classical_keypair(&alice_keypair);
+        free_classical_keypair(&bob_keypair);
+        return -1;
+    }
     
     const unsigned char test_message[] = "This is a test message for hybrid TLS";
     unsigned char signature[MAX_SIGNATURE_SIZE];
     size_t signature_len = sizeof(signature);
     
     start_time = get_time_us();
-    if (classical_sign(config->classical_sig, &alice_keypair, 
+    if (classical_sign(config->classical_sig, &sig_keypair, 
                       test_message, sizeof(test_message) - 1,
                       signature, &signature_len) != 0) {
         fprintf(stderr, "    Classical signature generation failed\n");
         free_classical_keypair(&alice_keypair);
         free_classical_keypair(&bob_keypair);
+        free_classical_keypair(&sig_keypair);
         return -1;
     }
     end_time = get_time_us();
@@ -134,16 +144,17 @@ int test_classical_operations(const test_config_t* config, performance_metrics_t
     
     start_time = get_time_us();
     int verify_result = classical_verify(config->classical_sig,
-                                        alice_keypair.public_key_bytes, alice_keypair.public_key_len,
+                                        sig_keypair.public_key_bytes, sig_keypair.public_key_len,
                                         test_message, sizeof(test_message) - 1,
                                         signature, signature_len);
     end_time = get_time_us();
     metrics->classical_verify_time = (end_time - start_time) / 1000.0;
     
     if (verify_result != 0) {
-        fprintf(stderr, "    Classical signature verification failed\n");
+        fprintf(stderr, "    Classical signature verification failed (code: %d)\n", verify_result);
         free_classical_keypair(&alice_keypair);
         free_classical_keypair(&bob_keypair);
+        free_classical_keypair(&sig_keypair);
         return -1;
     }
     
@@ -153,6 +164,7 @@ int test_classical_operations(const test_config_t* config, performance_metrics_t
     // Cleanup
     free_classical_keypair(&alice_keypair);
     free_classical_keypair(&bob_keypair);
+    free_classical_keypair(&sig_keypair);
     
     printf("    Classical operations completed successfully\n");
     return 0;
@@ -264,6 +276,10 @@ int run_basic_test_suite() {
  * Main function
  */
 int main(int argc, char* argv[]) {
+    // Suppress unused parameter warnings
+    (void)argc;
+    (void)argv;
+    
     printf("=== Hybrid TLS Test Framework ===\n");
     printf("Testing combinations of Classical + PQC + QKD cryptography\n\n");
     

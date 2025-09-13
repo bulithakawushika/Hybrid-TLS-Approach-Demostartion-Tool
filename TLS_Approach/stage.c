@@ -1,3 +1,4 @@
+#define _GNU_SOURCE
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
@@ -8,9 +9,9 @@
 #include <cjson/cJSON.h>
 
 // Configuration constants
-#define MAX_RETRIES 100
-#define MAX_OUTPUT_SIZE 8192
-#define MAX_KEY_SIZE 2048
+#define MAX_RETRIES 10
+#define MAX_OUTPUT_SIZE 32768    // Increased buffer size
+#define MAX_KEY_SIZE 4096        // Increased key size
 #define SHA3_512_DIGEST_LENGTH 64
 #define SHA256_DIGEST_LENGTH 32
 #define UUID_LENGTH 16  // 128 bits = 16 bytes
@@ -45,12 +46,14 @@ int execute_qkd_script(const char* script_path, char* output, size_t output_size
     size_t total_read = 0;
     size_t bytes_read;
     
-    // Read output from the script
+    // Read output from the script with better buffer management
     while ((bytes_read = fread(output + total_read, 1, 
                               output_size - total_read - 1, fp)) > 0) {
         total_read += bytes_read;
         if (total_read >= output_size - 1) {
-            break;
+            fprintf(stderr, "Output buffer overflow - output too large\n");
+            pclose(fp);
+            return -1;
         }
     }
     
@@ -68,9 +71,19 @@ int execute_qkd_script(const char* script_path, char* output, size_t output_size
  * Parse JSON output from QKD script and extract key and success status
  */
 int parse_qkd_result(const char* json_output, char* key, size_t key_size, int* success) {
+    if (json_output == NULL || strlen(json_output) == 0) {
+        fprintf(stderr, "Empty JSON output\n");
+        return -1;
+    }
+    
     cJSON* json = cJSON_Parse(json_output);
     if (json == NULL) {
-        fprintf(stderr, "Failed to parse JSON output\n");
+        const char* error_ptr = cJSON_GetErrorPtr();
+        if (error_ptr != NULL) {
+            fprintf(stderr, "JSON Parse Error before: %s\n", error_ptr);
+        } else {
+            fprintf(stderr, "Failed to parse JSON output\n");
+        }
         return -1;
     }
     
@@ -92,7 +105,21 @@ int parse_qkd_result(const char* json_output, char* key, size_t key_size, int* s
             return -1;
         }
         
-        strncpy(key, cJSON_GetStringValue(alice_key), key_size - 1);
+        const char* key_str = cJSON_GetStringValue(alice_key);
+        if (key_str == NULL) {
+            fprintf(stderr, "Failed to get key string value\n");
+            cJSON_Delete(json);
+            return -1;
+        }
+        
+        size_t key_len = strlen(key_str);
+        if (key_len >= key_size) {
+            fprintf(stderr, "Key too long: %zu >= %zu\n", key_len, key_size);
+            cJSON_Delete(json);
+            return -1;
+        }
+        
+        strncpy(key, key_str, key_size - 1);
         key[key_size - 1] = '\0';
     }
     
@@ -177,8 +204,16 @@ void print_hex(const unsigned char* data, size_t len) {
  */
 int process_qkd_protocol(const char* protocol_name, const char* script_name, 
                         qkd_key_data_t* key_data) {
-    char output[MAX_OUTPUT_SIZE];
-    char original_key[MAX_KEY_SIZE];
+    char* output = malloc(MAX_OUTPUT_SIZE);
+    char* original_key = malloc(MAX_KEY_SIZE);
+    
+    if (output == NULL || original_key == NULL) {
+        fprintf(stderr, "Failed to allocate memory\n");
+        free(output);
+        free(original_key);
+        return -1;
+    }
+    
     int success = 0;
     int retry_count = 0;
     
@@ -190,11 +225,11 @@ int process_qkd_protocol(const char* protocol_name, const char* script_name,
         printf("  Attempt %d: Executing %s...\n", retry_count, script_name);
         
         // Execute the QKD script
-        int exit_code = execute_qkd_script(script_name, output, sizeof(output));
+        int exit_code = execute_qkd_script(script_name, output, MAX_OUTPUT_SIZE);
         
         if (exit_code == 0) {
             // Parse the output
-            if (parse_qkd_result(output, original_key, sizeof(original_key), &success) == 0) {
+            if (parse_qkd_result(output, original_key, MAX_KEY_SIZE, &success) == 0) {
                 if (success) {
                     printf("  %s key generation successful! Key length: %zu bits\n", 
                            protocol_name, strlen(original_key));
@@ -214,6 +249,8 @@ int process_qkd_protocol(const char* protocol_name, const char* script_name,
         if (retry_count >= MAX_RETRIES) {
             fprintf(stderr, "  Maximum retries (%d) reached for %s\n", 
                     MAX_RETRIES, protocol_name);
+            free(output);
+            free(original_key);
             return -1;
         }
         
@@ -225,12 +262,16 @@ int process_qkd_protocol(const char* protocol_name, const char* script_name,
     // Generate kqkdm (SHA3-512 of original key)
     if (hash_sha3_512(original_key, key_data->kqkdm) != 0) {
         fprintf(stderr, "Failed to generate SHA3-512 hash for %s\n", protocol_name);
+        free(output);
+        free(original_key);
         return -1;
     }
     
     // Generate uuid (first 128 bits of SHA-256 of original key)
     if (hash_sha256_128bits(original_key, key_data->uuid) != 0) {
         fprintf(stderr, "Failed to generate SHA-256 hash for %s\n", protocol_name);
+        free(output);
+        free(original_key);
         return -1;
     }
     
@@ -247,7 +288,9 @@ int process_qkd_protocol(const char* protocol_name, const char* script_name,
     printf("Complete %s Key management successfully.\n\n", protocol_name);
     
     // Clear the original key from memory for security
-    memset(original_key, 0, sizeof(original_key));
+    memset(original_key, 0, MAX_KEY_SIZE);
+    free(output);
+    free(original_key);
     
     return 0;
 }
@@ -308,6 +351,10 @@ void display_summary() {
  * Main function
  */
 int main(int argc, char* argv[]) {
+    // Suppress unused parameter warnings
+    (void)argc;
+    (void)argv;
+    
     printf("=== QKD Key Generation Stage ===\n");
     printf("Generating quantum keys for hybrid TLS implementation...\n\n");
     

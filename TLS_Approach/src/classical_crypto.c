@@ -10,7 +10,7 @@
 #include <openssl/rand.h>
 
 /**
- * Generate classical keypair based on algorithm type
+ * Generate classical keypair for key exchange
  */
 int classical_keygen(classical_kex_t type, classical_keypair_t* keypair) {
     if (keypair == NULL) {
@@ -74,6 +74,81 @@ cleanup:
 }
 
 /**
+ * Generate classical keypair for digital signatures (separate from key exchange)
+ */
+int classical_sig_keygen(classical_sig_t type, classical_keypair_t* keypair) {
+    if (keypair == NULL) {
+        return -1;
+    }
+    
+    memset(keypair, 0, sizeof(classical_keypair_t));
+    
+    EVP_PKEY_CTX* ctx = NULL;
+    int ret = -1;
+    
+    switch (type) {
+        case SIG_ECDSA_P256:
+            ctx = EVP_PKEY_CTX_new_id(EVP_PKEY_EC, NULL);
+            if (ctx == NULL) goto cleanup;
+            
+            if (EVP_PKEY_keygen_init(ctx) <= 0) goto cleanup;
+            if (EVP_PKEY_CTX_set_ec_paramgen_curve_nid(ctx, NID_X9_62_prime256v1) <= 0) goto cleanup;
+            if (EVP_PKEY_keygen(ctx, &keypair->keypair) <= 0) goto cleanup;
+            break;
+            
+        case SIG_ECDSA_P384:
+            ctx = EVP_PKEY_CTX_new_id(EVP_PKEY_EC, NULL);
+            if (ctx == NULL) goto cleanup;
+            
+            if (EVP_PKEY_keygen_init(ctx) <= 0) goto cleanup;
+            if (EVP_PKEY_CTX_set_ec_paramgen_curve_nid(ctx, NID_secp384r1) <= 0) goto cleanup;
+            if (EVP_PKEY_keygen(ctx, &keypair->keypair) <= 0) goto cleanup;
+            break;
+            
+        case SIG_ED25519:
+            ctx = EVP_PKEY_CTX_new_id(EVP_PKEY_ED25519, NULL);
+            if (ctx == NULL) {
+                fprintf(stderr, "Failed to create Ed25519 context\n");
+                goto cleanup;
+            }
+            
+            if (EVP_PKEY_keygen_init(ctx) <= 0) {
+                fprintf(stderr, "Failed to initialize Ed25519 key generation\n");
+                goto cleanup;
+            }
+            
+            if (EVP_PKEY_keygen(ctx, &keypair->keypair) <= 0) {
+                fprintf(stderr, "Failed to generate Ed25519 keypair\n");
+                goto cleanup;
+            }
+            break;
+            
+        default:
+            fprintf(stderr, "Unsupported signature type: %d\n", type);
+            goto cleanup;
+    }
+    
+    // Export public key
+    if (export_public_key(keypair, &keypair->public_key_bytes, &keypair->public_key_len) != 0) {
+        fprintf(stderr, "Failed to export public key for signature\n");
+        goto cleanup;
+    }
+    
+    ret = 0;
+    
+cleanup:
+    if (ctx) {
+        EVP_PKEY_CTX_free(ctx);
+    }
+    
+    if (ret != 0 && keypair) {
+        free_classical_keypair(keypair);
+    }
+    
+    return ret;
+}
+
+/**
  * Perform classical key agreement
  */
 int classical_key_agreement(classical_kex_t type, 
@@ -82,6 +157,9 @@ int classical_key_agreement(classical_kex_t type,
                            size_t their_public_key_len,
                            unsigned char* shared_secret, 
                            size_t* shared_secret_len) {
+    
+    // Suppress unused parameter warning
+    (void)type;
     
     if (my_keypair == NULL || their_public_key == NULL || shared_secret == NULL || shared_secret_len == NULL) {
         return -1;
@@ -162,7 +240,8 @@ int classical_sign(classical_sig_t type,
             md = EVP_sha384();
             break;
         case SIG_ED25519:
-            md = NULL; // Ed25519 uses its own hash internally
+            // Ed25519 requires special handling - no explicit hash
+            md = NULL;
             break;
         default:
             fprintf(stderr, "Unsupported signature type: %d\n", type);
@@ -175,11 +254,13 @@ int classical_sign(classical_sig_t type,
         goto cleanup;
     }
     
+    // Initialize signing context
     if (EVP_DigestSignInit(ctx, NULL, md, NULL, keypair->keypair) <= 0) {
-        fprintf(stderr, "Failed to initialize signature\n");
+        fprintf(stderr, "Failed to initialize signature for type %d\n", type);
         goto cleanup;
     }
     
+    // Sign the message
     if (EVP_DigestSign(ctx, signature, sig_len, message, msg_len) <= 0) {
         fprintf(stderr, "Failed to sign message\n");
         goto cleanup;
@@ -232,7 +313,7 @@ int classical_verify(classical_sig_t type,
             md = EVP_sha384();
             break;
         case SIG_ED25519:
-            md = NULL;
+            md = NULL; // Ed25519 handles hashing internally
             break;
         default:
             fprintf(stderr, "Unsupported signature type: %d\n", type);
@@ -245,8 +326,9 @@ int classical_verify(classical_sig_t type,
         goto cleanup;
     }
     
+    // Initialize verification
     if (EVP_DigestVerifyInit(ctx, NULL, md, NULL, pkey) <= 0) {
-        fprintf(stderr, "Failed to initialize verification\n");
+        fprintf(stderr, "Failed to initialize verification for type %d\n", type);
         goto cleanup;
     }
     
@@ -320,21 +402,23 @@ int export_public_key(const classical_keypair_t* keypair,
         return -1;
     }
     
-    long len = BIO_get_mem_data(bio, public_key);
-    if (len <= 0) {
+    BUF_MEM* bptr;
+    BIO_get_mem_ptr(bio, &bptr);
+    
+    if (bptr == NULL || bptr->length <= 0) {
         BIO_free(bio);
         return -1;
     }
     
     // Allocate and copy the key data
-    *public_key = OPENSSL_malloc(len);
+    *public_key = OPENSSL_malloc(bptr->length);
     if (*public_key == NULL) {
         BIO_free(bio);
         return -1;
     }
     
-    BIO_read(bio, *public_key, len);
-    *public_key_len = len;
+    memcpy(*public_key, bptr->data, bptr->length);
+    *public_key_len = bptr->length;
     
     BIO_free(bio);
     return 0;

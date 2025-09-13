@@ -15,6 +15,7 @@ typedef struct {
 
 // Function prototypes for classical cryptography
 int classical_keygen(classical_kex_t type, classical_keypair_t* keypair);
+int classical_sig_keygen(classical_sig_t type, classical_keypair_t* keypair);
 int classical_key_agreement(classical_kex_t type, 
                            const classical_keypair_t* my_keypair,
                            const unsigned char* their_public_key, 
