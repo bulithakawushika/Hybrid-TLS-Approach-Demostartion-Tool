@@ -41,17 +41,20 @@ int run_alice_protocol(network_session_t* network_session, const test_config_t* 
     // Alice setup
     if (alice_setup_keys(&protocol_session) != 0) {
         fprintf(stderr, "Alice: Key setup failed\n");
+        cleanup_hybrid_session(&protocol_session);
         return -1;
     }
     
     // Create and sign ma message
     if (alice_create_ma_message(&protocol_session) != 0) {
         fprintf(stderr, "Alice: ma message creation failed\n");
+        cleanup_hybrid_session(&protocol_session);
         return -1;
     }
     
     if (alice_sign_ma_message(&protocol_session) != 0) {
         fprintf(stderr, "Alice: ma message signing failed\n");
+        cleanup_hybrid_session(&protocol_session);
         return -1;
     }
     
@@ -62,6 +65,7 @@ int run_alice_protocol(network_session_t* network_session, const test_config_t* 
                        protocol_session.ma_pqc_sig, protocol_session.ma_pqc_sig_len,
                        protocol_session.ma_mac, POLY1305_TAG_SIZE) != 0) {
         fprintf(stderr, "Alice: Failed to send ma message\n");
+        cleanup_hybrid_session(&protocol_session);
         return -1;
     }
     
@@ -74,35 +78,42 @@ int run_alice_protocol(network_session_t* network_session, const test_config_t* 
     // Simulate Bob's response by creating mock data
     // This would normally come from the network
     if (bob_setup_keys(&protocol_session) != 0) {
+        cleanup_hybrid_session(&protocol_session);
         return -1;
     }
     
     if (bob_verify_ma_message(&protocol_session) != 0) {
+        cleanup_hybrid_session(&protocol_session);
         return -1;
     }
     
     if (bob_create_mb_message(&protocol_session) != 0) {
+        cleanup_hybrid_session(&protocol_session);
         return -1;
     }
     
     if (bob_sign_mb_message(&protocol_session) != 0) {
+        cleanup_hybrid_session(&protocol_session);
         return -1;
     }
     
     // Alice processes mb message
     if (alice_process_mb_message(&protocol_session) != 0) {
         fprintf(stderr, "Alice: mb message processing failed\n");
+        cleanup_hybrid_session(&protocol_session);
         return -1;
     }
     
     // Derive final keys
     if (alice_derive_final_key(&protocol_session) != 0) {
         fprintf(stderr, "Alice: Final key derivation failed\n");
+        cleanup_hybrid_session(&protocol_session);
         return -1;
     }
     
     if (bob_derive_final_key(&protocol_session) != 0) {
         fprintf(stderr, "Alice: Bob final key derivation failed\n");
+        cleanup_hybrid_session(&protocol_session);
         return -1;
     }
     
@@ -128,6 +139,7 @@ int run_alice_protocol(network_session_t* network_session, const test_config_t* 
     const char* alice_message = "Hello Bob! This is Alice sending encrypted data via Hybrid TLS!";
     if (send_tls_data(network_session, alice_message) != 0) {
         fprintf(stderr, "Alice: Failed to send TLS data\n");
+        cleanup_hybrid_session(&protocol_session);
         return -1;
     }
     
@@ -135,12 +147,84 @@ int run_alice_protocol(network_session_t* network_session, const test_config_t* 
     char bob_response[256];
     if (receive_tls_data(network_session, bob_response, sizeof(bob_response)) != 0) {
         fprintf(stderr, "Alice: Failed to receive TLS data from Bob\n");
+        cleanup_hybrid_session(&protocol_session);
         return -1;
     }
     
     printf("Alice: Successfully completed TLS communication!\n");
     
-    // Cleanup
+    // Cleanup protocol session
+    cleanup_hybrid_session(&protocol_session);
+    
+    return 0;
+}
+
+/**
+ * Main Alice client
+ */
+int main(int argc, char* argv[]) {
+    printf("=== Alice - Hybrid TLS Client ===\n");
+    
+    // Setup signal handling
+    signal(SIGINT, signal_handler);
+    signal(SIGTERM, signal_handler);
+    
+    // Parse command line arguments
+    const char* server_ip = "127.0.0.1";
+    int server_port = DEFAULT_BOB_PORT;
+    
+    if (argc >= 2) {
+        server_ip = argv[1];
+    }
+    if (argc >= 3) {
+        server_port = atoi(argv[2]);
+    }
+    
+    printf("Alice: Connecting to server %s:%d\n", server_ip, server_port);
+    printf("Alice: Use Ctrl+C to stop the client\n\n");
+    
+    // Initialize libraries
+    if (initialize_liboqs() != 0) {
+        fprintf(stderr, "Alice: Failed to initialize LibOQS\n");
+        return 1;
+    }
+    
+    // Initialize network session
+    network_session_t alice_session;
+    global_alice_session = &alice_session;
+    
+    if (init_network_session(&alice_session, "Alice", DEFAULT_ALICE_PORT) != 0) {
+        fprintf(stderr, "Alice: Failed to initialize network session\n");
+        return 1;
+    }
+    
+    // Connect to Bob's server
+    if (connect_to_server(&alice_session, server_ip, server_port) != 0) {
+        fprintf(stderr, "Alice: Failed to connect to server\n");
+        cleanup_network_session(&alice_session);
+        return 1;
+    }
+    
+    print_network_info(&alice_session);
+    
+    // Run the hybrid TLS protocol
+    test_config_t config = {0, CLASSICAL_ECDHE_P256, SIG_ECDSA_P256, 
+                           PQC_ML_KEM_768, PQC_ML_DSA_65, QKD_BB84};
+    
+    int result = run_alice_protocol(&alice_session, &config);
+    
+    if (result == 0) {
+        printf("\nAlice: Protocol execution completed successfully!\n");
+        printf("Alice: TLS connection established and data exchanged.\n");
+        
+        // Keep connection alive for a bit
+        printf("Alice: Keeping connection alive for 10 seconds...\n");
+        sleep(10);
+    } else {
+        printf("\nAlice: Protocol execution failed!\n");
+    }
+    
+    // Cleanup and disconnect
     printf("Alice: Cleaning up and disconnecting...\n");
     cleanup_network_session(&alice_session);
     cleanup_liboqs();
