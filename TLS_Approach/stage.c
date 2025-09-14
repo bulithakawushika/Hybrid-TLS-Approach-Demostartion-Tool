@@ -10,8 +10,8 @@
 #include "src/qkd_data.h"
 
 // Configuration constants
-#define MAX_RETRIES 10
-#define MAX_OUTPUT_SIZE 32768    // Increased buffer size
+#define MAX_RETRIES 200              // Increased from 10 to 200
+#define MAX_OUTPUT_SIZE 32768        // Increased buffer size
 #define SHA3_512_DIGEST_LENGTH 64
 #define SHA256_DIGEST_LENGTH 32
 #define UUID_LENGTH 16  // 128 bits = 16 bytes
@@ -207,12 +207,14 @@ int process_qkd_protocol(const char* protocol_name, const char* script_name,
     int success = 0;
     int retry_count = 0;
     
-    printf("Starting %s key generation...\n", protocol_name);
+    printf("Starting %s key generation (max %d retries)...\n", protocol_name, MAX_RETRIES);
     
     // Retry until successful or max retries reached
     do {
         retry_count++;
-        printf("  Attempt %d: Executing %s...\n", retry_count, script_name);
+        if (retry_count <= 10 || retry_count % 50 == 0) {
+            printf("  Attempt %d: Executing %s...\n", retry_count, script_name);
+        }
         
         // Execute the QKD script
         int exit_code = execute_qkd_script(script_name, output, MAX_OUTPUT_SIZE);
@@ -221,19 +223,25 @@ int process_qkd_protocol(const char* protocol_name, const char* script_name,
             // Parse the output
             if (parse_qkd_result(output, original_key, MAX_KEY_SIZE, &success) == 0) {
                 if (success) {
-                    printf("  %s key generation successful! Key length: %zu bits\n", 
-                           protocol_name, strlen(original_key));
+                    printf("  %s key generation successful after %d attempts! Key length: %zu bits\n", 
+                           protocol_name, retry_count, strlen(original_key));
                     break;
                 } else {
-                    printf("  %s key generation failed (QBER too high or insufficient bits)\n", 
-                           protocol_name);
+                    if (retry_count <= 10 || retry_count % 50 == 0) {
+                        printf("  %s key generation failed (QBER too high or insufficient bits)\n", 
+                               protocol_name);
+                    }
                 }
             } else {
-                printf("  Failed to parse %s script output\n", protocol_name);
+                if (retry_count <= 10 || retry_count % 50 == 0) {
+                    printf("  Failed to parse %s script output\n", protocol_name);
+                }
             }
         } else {
-            printf("  %s script execution failed with exit code: %d\n", 
-                   protocol_name, exit_code);
+            if (retry_count <= 10 || retry_count % 50 == 0) {
+                printf("  %s script execution failed with exit code: %d\n", 
+                       protocol_name, exit_code);
+            }
         }
         
         if (retry_count >= MAX_RETRIES) {
@@ -244,8 +252,16 @@ int process_qkd_protocol(const char* protocol_name, const char* script_name,
             return -1;
         }
         
-        printf("  Retrying %s key generation...\n", protocol_name);
-        sleep(1); // Brief delay before retry
+        if (retry_count <= 10 || retry_count % 50 == 0) {
+            printf("  Retrying %s key generation...\n", protocol_name);
+        }
+        
+        // Brief delay before retry (shorter delay for faster iteration)
+        if (retry_count < 50) {
+            usleep(100000); // 0.1 second for first 50 attempts
+        } else {
+            usleep(50000);  // 0.05 second for subsequent attempts
+        }
         
     } while (!success);
     
@@ -369,7 +385,8 @@ int main(int argc, char* argv[]) {
     }
     
     printf("=== QKD Key Generation Stage ===\n");
-    printf("Generating quantum keys for hybrid TLS implementation...\n\n");
+    printf("Generating quantum keys for hybrid TLS implementation...\n");
+    printf("Maximum retries per protocol: %d\n\n", MAX_RETRIES);
     
     // Initialize OpenSSL
     OpenSSL_add_all_digests();
