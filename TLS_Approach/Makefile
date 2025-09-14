@@ -1,4 +1,4 @@
-# Makefile for Hybrid TLS Project with Protocol Implementation
+# Makefile for Hybrid TLS Project with Network Implementation
 CC = gcc
 CFLAGS = -Wall -Wextra -std=c99 -O2 -g -Isrc
 LDFLAGS = -lssl -lcrypto -loqs -lcjson -lm
@@ -31,13 +31,24 @@ PROTOCOL_OBJS = $(OBJDIR)/hybrid_tls_protocol.o $(OBJDIR)/protocol_demo.o $(OBJD
                 $(OBJDIR)/qkd_interface.o $(OBJDIR)/classical_crypto.o $(OBJDIR)/pqc_crypto.o \
                 $(OBJDIR)/mac_ops.o $(OBJDIR)/qkd_data.o
 
+# Network program object files
+ALICE_OBJS = $(OBJDIR)/alice_client.o $(OBJDIR)/network_protocol.o $(OBJDIR)/hybrid_tls_protocol.o \
+             $(OBJDIR)/config.o $(OBJDIR)/qkd_interface.o $(OBJDIR)/classical_crypto.o \
+             $(OBJDIR)/pqc_crypto.o $(OBJDIR)/mac_ops.o $(OBJDIR)/qkd_data.o
+
+BOB_OBJS = $(OBJDIR)/bob_server.o $(OBJDIR)/network_protocol.o $(OBJDIR)/hybrid_tls_protocol.o \
+           $(OBJDIR)/config.o $(OBJDIR)/qkd_interface.o $(OBJDIR)/classical_crypto.o \
+           $(OBJDIR)/pqc_crypto.o $(OBJDIR)/mac_ops.o $(OBJDIR)/qkd_data.o
+
 # Targets
 STAGE_TARGET = $(BINDIR)/stage
 TEST_RUNNER_TARGET = $(BINDIR)/test_runner
 PROTOCOL_DEMO_TARGET = $(BINDIR)/protocol_demo
+ALICE_CLIENT_TARGET = $(BINDIR)/alice_client
+BOB_SERVER_TARGET = $(BINDIR)/bob_server
 
 # Default target - build all
-all: $(STAGE_TARGET) $(TEST_RUNNER_TARGET) $(PROTOCOL_DEMO_TARGET)
+all: $(STAGE_TARGET) $(TEST_RUNNER_TARGET) $(PROTOCOL_DEMO_TARGET) $(ALICE_CLIENT_TARGET) $(BOB_SERVER_TARGET)
 
 # Stage target (QKD key generation)
 $(STAGE_TARGET): $(STAGE_OBJS)
@@ -51,6 +62,14 @@ $(TEST_RUNNER_TARGET): $(TEST_RUNNER_OBJS)
 $(PROTOCOL_DEMO_TARGET): $(PROTOCOL_OBJS)
 	$(CC) $(PROTOCOL_OBJS) -o $(PROTOCOL_DEMO_TARGET) $(LDFLAGS)
 
+# Alice client target (network TLS client)
+$(ALICE_CLIENT_TARGET): $(ALICE_OBJS)
+	$(CC) $(ALICE_OBJS) -o $(ALICE_CLIENT_TARGET) $(LDFLAGS)
+
+# Bob server target (network TLS server)
+$(BOB_SERVER_TARGET): $(BOB_OBJS)
+	$(CC) $(BOB_OBJS) -o $(BOB_SERVER_TARGET) $(LDFLAGS)
+
 # Object file rules
 $(OBJDIR)/stage.o: stage.c
 	$(CC) $(CFLAGS) -c stage.c -o $(OBJDIR)/stage.o
@@ -59,7 +78,7 @@ $(OBJDIR)/%.o: $(SRCDIR)/%.c
 	$(CC) $(CFLAGS) -c $< -o $@
 
 # Phony targets
-.PHONY: clean test setup install-deps check-deps protocol-test
+.PHONY: clean test setup install-deps check-deps protocol-test network-demo start-bob start-alice
 
 # Clean build files
 clean:
@@ -141,6 +160,38 @@ complete-test: $(STAGE_TARGET) $(PROTOCOL_DEMO_TARGET)
 	@echo "=== Step 2: Running Protocol Demonstration ==="
 	./$(PROTOCOL_DEMO_TARGET) --quick
 
+# Network demo targets
+network-demo: $(BOB_SERVER_TARGET) $(ALICE_CLIENT_TARGET)
+	@echo "=== Network TLS Demo Setup ==="
+	@echo "Run the following commands in separate terminals:"
+	@echo "Terminal 1: make start-bob"
+	@echo "Terminal 2: make start-alice"
+	@echo ""
+	@echo "Or run the automated demo:"
+	@echo "make network-test"
+
+# Start Bob server
+start-bob: $(BOB_SERVER_TARGET)
+	@echo "Starting Bob (TLS Server) on port 8081..."
+	./$(BOB_SERVER_TARGET) 8081
+
+# Start Alice client
+start-alice: $(ALICE_CLIENT_TARGET)
+	@echo "Starting Alice (TLS Client) connecting to localhost:8081..."
+	sleep 2
+	./$(ALICE_CLIENT_TARGET) 127.0.0.1 8081 8080
+
+# Automated network test (runs both in background)
+network-test: $(BOB_SERVER_TARGET) $(ALICE_CLIENT_TARGET)
+	@echo "=== Automated Network TLS Test ==="
+	@echo "Starting Bob server in background..."
+	./$(BOB_SERVER_TARGET) 8081 &
+	@sleep 3
+	@echo "Starting Alice client..."
+	./$(ALICE_CLIENT_TARGET) 127.0.0.1 8081 8080
+	@echo "Stopping background processes..."
+	@pkill -f bob_server || true
+
 # Debug build
 debug: CFLAGS += -DDEBUG -g3 -O0
 debug: clean all
@@ -149,17 +200,57 @@ debug: clean all
 release: CFLAGS += -DNDEBUG -O3
 release: clean all
 
+# Static analysis
+analyze:
+	@echo "Running static analysis..."
+	cppcheck --enable=all --std=c99 $(SRCDIR)/*.c stage.c
+
+# Memory check with Valgrind
+memcheck: $(PROTOCOL_DEMO_TARGET)
+	@echo "Running memory check on protocol demo..."
+	valgrind --leak-check=full --show-leak-kinds=all ./$(PROTOCOL_DEMO_TARGET) --quick
+
+# Generate documentation
+docs:
+	@echo "Generating documentation..."
+	doxygen Doxyfile 2>/dev/null || echo "Doxygen not installed"
+
+# Code formatting
+format:
+	@echo "Formatting code..."
+	find $(SRCDIR) -name "*.c" -o -name "*.h" | xargs clang-format -i 2>/dev/null || echo "clang-format not installed"
+	clang-format -i stage.c 2>/dev/null || echo "clang-format not installed"
+
+# Show build statistics
+stats: $(PROTOCOL_DEMO_TARGET)
+	@echo "=== Build Statistics ==="
+	@echo "Protocol demo size: $(shell du -h $(PROTOCOL_DEMO_TARGET) 2>/dev/null | cut -f1 || echo 'N/A')"
+	@echo "Alice client size: $(shell du -h $(ALICE_CLIENT_TARGET) 2>/dev/null | cut -f1 || echo 'N/A')"
+	@echo "Bob server size: $(shell du -h $(BOB_SERVER_TARGET) 2>/dev/null | cut -f1 || echo 'N/A')"
+
 # Help target
 help:
-	@echo "Hybrid TLS Makefile - Protocol Implementation"
+	@echo "Hybrid TLS Makefile - Complete Implementation"
 	@echo ""
 	@echo "Build Targets:"
-	@echo "  all              - Build all targets (stage + test_runner + protocol_demo)"
-	@echo "  protocol-demo    - Build and run hybrid TLS protocol demonstration"
-	@echo "  protocol-quick   - Run quick protocol demo (single config)"
-	@echo "  protocol-suite   - Run protocol test suite (multiple configs)"
-	@echo "  protocol-benchmark - Run protocol performance benchmark"
+	@echo "  all              - Build all programs"
+	@echo "  clean            - Clean build files"
+	@echo ""
+	@echo "Single Process Demo:"
+	@echo "  protocol-quick   - Quick protocol demo"
 	@echo "  complete-test    - Generate QKD keys + run protocol demo"
 	@echo ""
+	@echo "Network Demo (Client-Server):"
+	@echo "  network-demo     - Show instructions for manual network demo"
+	@echo "  start-bob        - Start Bob TLS server (port 8081)"
+	@echo "  start-alice      - Start Alice TLS client"
+	@echo "  network-test     - Automated network test (both processes)"
+	@echo ""
+	@echo "Development:"
+	@echo "  debug            - Build with debug symbols"
+	@echo "  analyze          - Run static analysis"
+	@echo "  memcheck         - Run memory leak detection"
+	@echo ""
 	@echo "Quick Start:"
-	@echo "  make all && make complete-test"
+	@echo "  make all && make complete-test    # Single process demo"
+	@echo "  make all && make network-test     # Network demo"
