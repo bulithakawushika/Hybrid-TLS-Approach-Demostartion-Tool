@@ -153,7 +153,7 @@ run-alice: $(BIN_DIR)/alice_client
 network-test: $(BIN_DIR)/bob_server $(BIN_DIR)/alice_client generate-keys
 	@echo "=== Running Complete Network Test ==="
 	@echo "Step 1: Generating QKD keys..."
-	@./$(BIN_DIR)/stage
+	@./$(BIN_DIR)/stage --non-blocking
 	@echo ""
 	@echo "Step 2: Killing any existing Bob servers..."
 	@pkill -f bob_server || true
@@ -166,6 +166,16 @@ network-test: $(BIN_DIR)/bob_server $(BIN_DIR)/alice_client generate-keys
 	@echo ""
 	@echo "Step 4: Starting Alice client..."
 	@./$(BIN_DIR)/alice_client; \
+	EXIT_CODE=$?; \
+	echo ""; \
+	echo "Step 5: Cleaning up Bob server..."; \
+	pkill -f bob_server || true; \
+	if [ $EXIT_CODE -eq 0 ]; then \
+		echo "=== Network Test PASSED ==="; \
+	else \
+		echo "=== Network Test FAILED ==="; \
+	fi; \
+	exit $EXIT_CODE; \
 	EXIT_CODE=$$?; \
 	echo ""; \
 	echo "Step 5: Cleaning up Bob server..."; \
@@ -180,7 +190,7 @@ network-test: $(BIN_DIR)/bob_server $(BIN_DIR)/alice_client generate-keys
 # Quick test to verify QKD key generation works
 test-qkd: $(BIN_DIR)/stage
 	@echo "=== Testing QKD Key Generation ==="
-	./$(BIN_DIR)/stage
+	./$(BIN_DIR)/stage --non-blocking
 
 # Complete test suite
 test-all: test-basic demo-quick network-test

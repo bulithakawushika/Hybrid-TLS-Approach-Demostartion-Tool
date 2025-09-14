@@ -6,10 +6,47 @@
 #include <openssl/hmac.h>
 #include <openssl/sha.h>
 
-// External references to QKD keys from stage.c
+// External references to QKD keys from qkd_data.c
 extern qkd_key_data_t bb84_data;
 extern qkd_key_data_t e91_data;
 extern qkd_key_data_t mdi_data;
+
+// Static flag to track if keys have been loaded
+static int keys_loaded = 0;
+
+/**
+ * Load QKD keys from file if not already in memory
+ */
+int load_qkd_keys_from_file() {
+    if (keys_loaded) {
+        return 0; // Already loaded
+    }
+    
+    FILE* fp = fopen("/tmp/qkd_keys.dat", "rb");
+    if (fp == NULL) {
+        fprintf(stderr, "QKD keys file not found. Please run 'make generate-keys' first.\n");
+        return -1;
+    }
+    
+    // Read all three key structures
+    if (fread(&bb84_data, sizeof(qkd_key_data_t), 1, fp) != 1 ||
+        fread(&e91_data, sizeof(qkd_key_data_t), 1, fp) != 1 ||
+        fread(&mdi_data, sizeof(qkd_key_data_t), 1, fp) != 1) {
+        fprintf(stderr, "Failed to read QKD keys from file\n");
+        fclose(fp);
+        return -1;
+    }
+    
+    fclose(fp);
+    keys_loaded = 1;
+    
+    printf("QKD keys loaded from /tmp/qkd_keys.dat\n");
+    printf("  BB84: %s\n", bb84_data.valid ? "Valid" : "Invalid");
+    printf("  E91:  %s\n", e91_data.valid ? "Valid" : "Invalid");
+    printf("  MDI:  %s\n", mdi_data.valid ? "Valid" : "Invalid");
+    
+    return 0;
+}
 
 /**
  * Simple HKDF implementation using HMAC-SHA256
@@ -83,6 +120,11 @@ int simple_hkdf(const unsigned char* ikm, size_t ikm_len,
  */
 int get_qkd_key(qkd_protocol_t protocol, qkd_key_data_t* key_out) {
     if (key_out == NULL) {
+        return -1;
+    }
+    
+    // Load keys from file if not already in memory
+    if (load_qkd_keys_from_file() != 0) {
         return -1;
     }
     
@@ -171,6 +213,11 @@ int derive_qkd_components(const unsigned char* kqkdm, size_t kqkdm_len,
  * Check if QKD keys are available for all protocols
  */
 int check_qkd_availability(void) {
+    // Try to load keys first
+    if (load_qkd_keys_from_file() != 0) {
+        return -1;
+    }
+    
     printf("Checking QKD key availability:\n");
     printf("  BB84: %s\n", bb84_data.valid ? "Available" : "Not Available");
     printf("  E91:  %s\n", e91_data.valid ? "Available" : "Not Available");

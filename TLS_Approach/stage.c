@@ -338,12 +338,35 @@ void display_summary() {
 }
 
 /**
- * Main function
+ * Save QKD keys to a temporary file for other programs to load
+ */
+int save_qkd_keys_to_file() {
+    FILE* fp = fopen("/tmp/qkd_keys.dat", "wb");
+    if (fp == NULL) {
+        fprintf(stderr, "Failed to create QKD keys file\n");
+        return -1;
+    }
+    
+    // Write all three key structures
+    fwrite(&bb84_data, sizeof(qkd_key_data_t), 1, fp);
+    fwrite(&e91_data, sizeof(qkd_key_data_t), 1, fp);
+    fwrite(&mdi_data, sizeof(qkd_key_data_t), 1, fp);
+    
+    fclose(fp);
+    
+    printf("QKD keys saved to /tmp/qkd_keys.dat\n");
+    return 0;
+}
+
+/**
+ * Main function - with non-blocking option
  */
 int main(int argc, char* argv[]) {
-    // Suppress unused parameter warnings
-    (void)argc;
-    (void)argv;
+    // Check if running in non-blocking mode
+    int non_blocking = 0;
+    if (argc > 1 && strcmp(argv[1], "--non-blocking") == 0) {
+        non_blocking = 1;
+    }
     
     printf("=== QKD Key Generation Stage ===\n");
     printf("Generating quantum keys for hybrid TLS implementation...\n\n");
@@ -372,16 +395,27 @@ int main(int argc, char* argv[]) {
     // Display summary
     display_summary();
     
-    printf("All QKD protocols processed successfully!\n");
-    printf("Keys are stored in memory and ready for TLS integration.\n");
+    // Save keys to file for other programs to use
+    if (save_qkd_keys_to_file() != 0) {
+        fprintf(stderr, "Failed to save QKD keys to file\n");
+        goto cleanup;
+    }
     
-    // In a real implementation, you might want to keep the program running
-    // or save the keys to a secure storage mechanism for the TLS process to use
-    printf("\nPress Enter to clear keys and exit...");
-    getchar();
+    printf("All QKD protocols processed successfully!\n");
+    printf("Keys are stored in /tmp/qkd_keys.dat for TLS integration.\n");
+    
+    if (non_blocking) {
+        printf("Running in non-blocking mode - keys saved and ready for use.\n");
+    } else {
+        // Interactive mode - wait for user input
+        printf("\nPress Enter to clear keys and exit...");
+        getchar();
+    }
     
 cleanup:
-    cleanup_memory();
+    if (!non_blocking) {
+        cleanup_memory();
+    }
     EVP_cleanup();
     
     return 0;
