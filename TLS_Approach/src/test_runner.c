@@ -12,11 +12,8 @@
 #include "classical_crypto.h"
 #include "pqc_crypto.h"
 #include "mac_ops.h"
+#include "qkd_data.h"
 
-// External QKD key data from stage.c
-qkd_key_data_t bb84_data = {0};
-qkd_key_data_t e91_data = {0};
-qkd_key_data_t mdi_data = {0};
 
 /**
  * Get current time in microseconds

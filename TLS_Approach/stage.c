@@ -7,26 +7,16 @@
 #include <openssl/evp.h>
 #include <openssl/sha.h>
 #include <cjson/cJSON.h>
+#include "src/qkd_data.h"
 
 // Configuration constants
 #define MAX_RETRIES 10
 #define MAX_OUTPUT_SIZE 32768    // Increased buffer size
-#define MAX_KEY_SIZE 4096        // Increased key size
 #define SHA3_512_DIGEST_LENGTH 64
 #define SHA256_DIGEST_LENGTH 32
 #define UUID_LENGTH 16  // 128 bits = 16 bytes
 
-// Global storage for QKD keys and UUIDs
-typedef struct {
-    unsigned char kqkdm[SHA3_512_DIGEST_LENGTH];  // SHA3-512 hash of original key
-    unsigned char uuid[UUID_LENGTH];              // First 128 bits of SHA-256 hash
-    int valid;                                    // Flag to indicate if data is valid
-} qkd_key_data_t;
-
-// Global QKD key storage
-qkd_key_data_t bb84_data = {0};
-qkd_key_data_t e91_data = {0};
-qkd_key_data_t mdi_data = {0};
+// QKD data is now defined in src/qkd_data.c and declared in src/qkd_data.h
 
 /**
  * Execute a Python QKD script and capture its output
