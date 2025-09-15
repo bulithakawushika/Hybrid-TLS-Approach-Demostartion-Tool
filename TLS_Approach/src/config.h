@@ -6,7 +6,7 @@
 
 // Maximum limits
 #define MAX_KEY_SIZE 1024
-#define MAX_SIGNATURE_SIZE 2048
+#define MAX_SIGNATURE_SIZE 81920
 #define MAX_MESSAGE_SIZE 4096
 #define SHA3_512_DIGEST_LENGTH 64
 #define SHA256_DIGEST_LENGTH 32
@@ -70,7 +70,62 @@ typedef struct {
     int valid;                                    // Flag to indicate if data is valid
 } qkd_key_data_t;
 
-// Performance metrics structure
+// Performance metrics structure for comprehensive testing WITH CPU MONITORING
+typedef struct {
+    int test_id;
+    char test_description[256];
+    
+    // QKD Performance
+    double qkd_generation_time;
+    double qkd_cpu_utilization;     // CPU percentage for QKD generation
+    int qkd_retry_count;
+    int qkd_key_bits;
+    
+    // Classical Crypto Performance
+    double classical_keygen_time;
+    double classical_keygen_cpu;    // CPU percentage for classical keygen
+    double classical_sign_time;
+    double classical_sign_cpu;      // CPU percentage for classical signing
+    double classical_verify_time;
+    double classical_verify_cpu;    // CPU percentage for classical verification
+    size_t classical_key_size;
+    size_t classical_signature_size;
+    
+    // PQC Performance
+    double pqc_keygen_time;
+    double pqc_keygen_cpu;          // CPU percentage for PQC keygen
+    double pqc_encap_time;
+    double pqc_encap_cpu;           // CPU percentage for PQC encapsulation
+    double pqc_decap_time;
+    double pqc_decap_cpu;           // CPU percentage for PQC decapsulation
+    double pqc_sign_time;
+    double pqc_sign_cpu;            // CPU percentage for PQC signing
+    double pqc_verify_time;
+    double pqc_verify_cpu;          // CPU percentage for PQC verification
+    size_t pqc_public_key_size;
+    size_t pqc_secret_key_size;
+    size_t pqc_ciphertext_size;
+    size_t pqc_signature_size;
+    
+    // TLS Handshake Performance
+    double handshake_total_time;
+    double handshake_total_cpu;     // Overall CPU percentage for handshake
+    double alice_setup_time;
+    double bob_setup_time;
+    double message_creation_time;
+    double signature_total_time;
+    double verification_total_time;
+    double key_derivation_time;
+    
+    // Memory Usage
+    size_t peak_memory_usage;
+    
+    // Success/Failure
+    int test_success;
+    char error_message[256];
+} test_performance_t;
+
+// Original performance metrics structure
 typedef struct {
     double classical_keygen_time;
     double classical_sign_time;
@@ -100,6 +155,7 @@ extern const char* liboqs_sig_names[PQC_SIG_MAX];
 
 // Function prototypes
 void generate_test_matrix(test_config_t* tests, int* total_tests);
+void generate_144_test_combinations(test_config_t* tests, int* total_tests);
 const char* get_test_description(const test_config_t* config);
 int calculate_total_combinations(void);
 
